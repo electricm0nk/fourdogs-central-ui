@@ -38,6 +38,10 @@ import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
+import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
+import { useIsWide } from '@/hooks/use_is_wide'
+import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
+import type { OrderItem } from '@/types/order_item'
 
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
@@ -315,7 +319,7 @@ function ChairTab({ orderId, isEditable }: { orderId: string; isEditable: boolea
 
 const SUCCESS_DURATION_MS = 3000
 
-function ExportCSVButton({ orderId }: { orderId: string }) {
+function ExportButton({ orderId, label }: { orderId: string; label: string }) {
   const [exportSuccess, setExportSuccess] = useState(false)
 
   const handleExport = useCallback(async () => {
@@ -334,7 +338,7 @@ function ExportCSVButton({ orderId }: { orderId: string }) {
 
   return (
     <Button variant="outline" onClick={handleExport}>
-      {exportSuccess ? '✓ Downloaded' : 'Export CSV'}
+      {exportSuccess ? '✓ Downloaded' : label}
     </Button>
   )
 }
@@ -344,6 +348,8 @@ export function OrderDetail() {
   const navigate = useNavigate()
   const { data: order, isLoading } = useOrder(id ?? '')
   const { mutate: submitOrder, isPending } = useSubmitOrder()
+  const { data: vendorAdapters } = useVendorAdapters()
+  const adapterType = vendorAdapters?.find((a) => a.id === order?.vendor_adapter_id)?.adapter_type ?? ''
 
   const catalogQuery = useVendorCatalog(order?.vendor_id, order?.vendor_adapter_id)
   const sourceSkus = catalogQuery.data ?? []
@@ -924,9 +930,13 @@ export function OrderDetail() {
           <span className={cn('text-xs', getMutedTextClass(uiMode))}>Order date: {formatOrderDate(order.order_date)}</span>
           {order.submitted ? (
             <>
+<<<<<<< HEAD
               <span className={cn('text-sm italic', getMutedTextClass(uiMode))}>Read-only</span>
               <Badge className={uiMode === 'dark' ? 'bg-emerald-900 text-emerald-200' : 'bg-green-100 text-green-800'}>Submitted</Badge>
-              <ExportCSVButton orderId={order.id} />
+              <ExportButton orderId={order.id} label="Export CSV" />
+              {adapterType === 'etailpet' && (
+                <ExportButton orderId={order.id} label="Export EtailPet" />
+              )}
               <Button
                 disabled={isPending}
                 className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
