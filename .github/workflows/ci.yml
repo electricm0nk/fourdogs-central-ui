@@ -30,11 +30,20 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Dispatch fourdogs-central CI
+      - name: Dispatch fourdogs-central CI (prod)
         if: github.ref == 'refs/heads/main'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.CROSS_REPO_PAT }}
           repository: electricm0nk/fourdogs-central
           event-type: ui-build-complete
+          client-payload: '{"sha": "${{ github.sha }}"}'
+
+      - name: Dispatch fourdogs-central CI (dev)
+        if: github.ref == 'refs/heads/develop'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          repository: electricm0nk/fourdogs-central
+          event-type: ui-build-complete-dev
           client-payload: '{"sha": "${{ github.sha }}"}'
