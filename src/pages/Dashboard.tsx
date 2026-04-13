@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { DataFreshnessPanel } from '@/components/DataFreshnessPanel'
 import { useOrders } from '@/hooks/use_orders'
 import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
+import { useArchiveOrder } from '@/hooks/use_order_mutations'
 import { api } from '@/lib/api'
 import type { Order } from '@/types/order'
 
@@ -26,21 +27,39 @@ function formatOrderDate(dateStr: string): string {
 
 function OrderCard({ order }: { order: Order }) {
   const navigate = useNavigate()
+  const { mutate: archiveOrder, isPending } = useArchiveOrder()
+
   return (
-    <article
-      className="cursor-pointer rounded-lg border p-4 hover:border-blue-400 transition-colors"
-      onClick={() => navigate(`/orders/${order.id}`)}
-    >
+    <article className="rounded-lg border bg-white p-4 hover:border-blue-400 transition-colors">
       <div className="flex items-center justify-between">
-        <div>
+        <div
+          className="flex-1 cursor-pointer"
+          onClick={() => navigate(`/orders/${order.id}`)}
+        >
           <p className="font-medium">{order.vendor_name}</p>
           <p className="text-sm text-gray-500">{formatOrderDate(order.order_date)}</p>
         </div>
-        {order.submitted ? (
-          <Badge className="bg-green-100 text-green-800">Submitted</Badge>
-        ) : (
-          <Badge className="bg-gray-100 text-gray-800">In Progress</Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {order.submitted ? (
+            <Badge className="bg-green-100 text-green-800">Submitted</Badge>
+          ) : (
+            <Badge className="bg-gray-100 text-gray-800">In Progress</Badge>
+          )}
+          {!order.archived && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={(e) => {
+                e.stopPropagation()
+                archiveOrder({ id: order.id })
+              }}
+              aria-label="Archive order"
+            >
+              Archive
+            </Button>
+          )}
+        </div>
       </div>
     </article>
   )
@@ -139,7 +158,9 @@ function CreateOrderModal({
 
 export function Dashboard() {
   const [modalOpen, setModalOpen] = useState(false)
-  const { data: orders = [], isLoading } = useOrders()
+  const [showArchived, setShowArchived] = useState(false)
+  const { data: orders = [], isLoading } = useOrders(false)
+  const { data: archivedOrders = [], isLoading: archivedLoading } = useOrders(true)
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -166,6 +187,30 @@ export function Dashboard() {
             ))}
           </div>
         )}
+
+        <div>
+          <Button
+            variant="outline"
+            onClick={() => setShowArchived((v) => !v)}
+          >
+            {showArchived ? 'Hide Archived' : 'Show Archived'}
+          </Button>
+
+          {showArchived && (
+            <div className="mt-4 space-y-3">
+              <h2 className="text-lg font-semibold text-gray-600">Archived Orders</h2>
+              {archivedLoading ? (
+                <div className="text-center py-4 text-gray-500">Loading…</div>
+              ) : archivedOrders.length === 0 ? (
+                <p className="text-sm text-gray-500">No archived orders.</p>
+              ) : (
+                archivedOrders.map((order) => (
+                  <OrderCard key={order.id} order={order} />
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
