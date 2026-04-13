@@ -31,7 +31,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Dispatch fourdogs-central CI (prod)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && secrets.CROSS_REPO_PAT != ''
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.CROSS_REPO_PAT }}
@@ -40,7 +40,7 @@ jobs:
           client-payload: '{"sha": "${{ github.sha }}"}'
 
       - name: Dispatch fourdogs-central CI (dev)
-        if: github.ref == 'refs/heads/develop'
+        if: github.ref == 'refs/heads/develop' && secrets.CROSS_REPO_PAT != ''
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.CROSS_REPO_PAT }}
