@@ -1,19 +1,39 @@
-// Central API fetch client — stub wired in Story 1.3
-const API_BASE = ''
+export class ApiError extends Error {
+  status: number
 
-export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...options?.headers,
+      ...init?.headers,
     },
-    ...options,
+    ...init,
   })
 
-  if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${res.statusText}`)
-  }
+  if (res.status === 401) throw new ApiError(401, 'Unauthorized')
+  if (!res.ok) throw new ApiError(res.status, res.statusText)
 
   return res.json() as Promise<T>
+}
+
+export const api = {
+  get: <T>(path: string) => apiFetch<T>(path),
+  post: <T>(path: string, body: unknown) =>
+    apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) =>
+    apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
+  postForm: <T>(path: string, body: FormData) =>
+    apiFetch<T>(path, {
+      method: 'POST',
+      body,
+      headers: {},  // Let browser set Content-Type with boundary
+    }),
 }

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { ApiError } from '@/lib/api'
 
 // Mock useCurrentUser hook
 vi.mock('@/hooks/use_current_user', () => ({
@@ -37,7 +38,7 @@ describe('ProtectedRoute', () => {
       data: { google_sub: 'sub123', email: 'test@example.com', name: 'Test' },
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useCurrentUser>)
+    } as unknown as ReturnType<typeof useCurrentUser>)
 
     render(
       wrapper(
@@ -55,7 +56,7 @@ describe('ProtectedRoute', () => {
       data: undefined,
       isLoading: true,
       error: null,
-    } as ReturnType<typeof useCurrentUser>)
+    } as unknown as ReturnType<typeof useCurrentUser>)
 
     render(
       wrapper(
@@ -69,12 +70,11 @@ describe('ProtectedRoute', () => {
   })
 
   it('redirects to /login on 401 error', () => {
-    const { ApiError } = vi.importActual('@/lib/api') as { ApiError: new (status: number, msg: string) => Error & { status: number } }
     vi.mocked(useCurrentUser).mockReturnValue({
       data: undefined,
       isLoading: false,
       error: new ApiError(401, 'Unauthorized'),
-    } as ReturnType<typeof useCurrentUser>)
+    } as unknown as ReturnType<typeof useCurrentUser>)
 
     render(
       wrapper(

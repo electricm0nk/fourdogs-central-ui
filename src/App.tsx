@@ -1,5 +1,6 @@
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router'
 import { LoginPage } from '@/pages/LoginPage'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 // Root layout — wraps all routes
 function RootLayout() {
@@ -20,7 +21,14 @@ const router = createBrowserRouter([
     path: '/',
     element: <RootLayout />,
     children: [
-      { index: true, element: <Dashboard /> },
+      {
+        index: true,
+        element: (
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        ),
+      },
       { path: 'login', element: <LoginPage /> },
       { path: '*', element: <NotFound /> },
     ],
