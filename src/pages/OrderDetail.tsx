@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useParams, useNavigate } from 'react-router'
@@ -76,6 +76,267 @@ interface WorksheetLineItem {
 function formatOrderDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function ItemSkeleton() {
+  return (
+    <div
+      data-testid="item-skeleton"
+      className="h-12 rounded-md bg-gray-200 animate-pulse"
+    />
+  )
+}
+
+function QtyControl({
+  value,
+  itemId,
+  orderId,
+  mustHave,
+  onPatch,
+}: {
+  value: number
+  itemId: string
+  orderId: string
+  mustHave?: boolean
+  onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
+}) {
+  const [localQty, setLocalQty] = useState(value)
+  const [pendingZero, setPendingZero] = useState(false)
+  const [prevQty, setPrevQty] = useState(value)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function fireDebounced(qty: number) {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      onPatch({ orderId, itemId, final_qty: qty })
+    }, DEBOUNCE_MS)
+  }
+
+  function handleIncrement() {
+    const next = localQty + 1
+    setLocalQty(next)
+    fireDebounced(next)
+  }
+
+  function handleDecrement() {
+    if (localQty <= 0) return
+    const next = localQty - 1
+    if (next === 0 && mustHave) {
+      setPrevQty(localQty)
+      setLocalQty(0)
+      setPendingZero(true)
+      return
+    }
+    setLocalQty(next)
+    fireDebounced(next)
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = parseInt(e.target.value, 10)
+    if (isNaN(val) || val < 0) return
+    if (val === 0 && mustHave && localQty > 0) {
+      setPrevQty(localQty)
+      setLocalQty(0)
+      setPendingZero(true)
+      return
+    }
+    setLocalQty(val)
+    fireDebounced(val)
+  }
+
+  function confirmZero() {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    setPendingZero(false)
+    onPatch({ orderId, itemId, final_qty: 0 })
+  }
+
+  function cancelZero() {
+    setPendingZero(false)
+    setLocalQty(prevQty)
+  }
+
+  return (
+    <>
+      {pendingZero && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="absolute z-10 rounded-md border bg-white p-3 shadow-lg text-sm space-y-2 w-56"
+        >
+          <p className="font-medium">This is a must-have item. Set to 0?</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" onClick={confirmZero}>
+              Yes, set to 0
+            </Button>
+            <Button size="sm" variant="outline" onClick={cancelZero}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-1">
+        <button
+          className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100 disabled:opacity-40"
+          onClick={handleDecrement}
+          disabled={localQty <= 0}
+          aria-label="-"
+        >
+          −
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={localQty}
+          onChange={handleChange}
+          className="w-14 text-center border rounded h-11 text-sm"
+          min={0}
+        />
+        <button
+          className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100"
+          onClick={handleIncrement}
+          aria-label="+"
+        >
+          +
+        </button>
+      </div>
+    </>
+  )
+}
+
+function OrderItemRow({
+  item,
+  orderId,
+  onPatch,
+}: {
+  item: OrderItem
+  orderId: string
+  onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
+}) {
+  return (
+    <div
+      className={`relative flex items-center justify-between min-h-[48px] p-3 rounded-md border ${
+        item.must_have ? 'border-amber-400 bg-amber-50' : 'bg-white'
+      }`}
+    >
+      <div className="flex-1">
+        <p className="font-medium text-sm">{item.item_name}</p>
+        <p className="text-xs text-gray-500">SKU: {item.item_id} · Stock: {item.current_stock_qty}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {item.must_have && (
+          <Badge className="bg-amber-100 text-amber-800 text-xs">Must-Have</Badge>
+        )}
+        <QtyControl
+          value={item.final_qty}
+          itemId={item.id}
+          orderId={orderId}
+          mustHave={item.must_have}
+          onPatch={onPatch}
+        />
+      </div>
+    </div>
+  )
+}
+
+function FloorWalkTab({ orderId }: { orderId: string }) {
+  const [search, setSearch] = useState('')
+  const { data: items, isLoading } = useOrderItems(orderId)
+  const { mutate: patchItem, isPending } = usePatchOrderItem()
+
+  const filtered = items?.filter(
+    (item) =>
+      search === '' ||
+      item.item_name.toLowerCase().includes(search.toLowerCase()) ||
+      item.item_id.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div className="space-y-3">
+      <ConnectivityBadge isSyncing={isPending} />
+
+      <div className="relative">
+        <Input
+          placeholder="Search items…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            onClick={() => setSearch('')}
+            aria-label="Clear search"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => <ItemSkeleton key={i} />)}
+        </div>
+      )}
+
+      {!isLoading && (!filtered || filtered.length === 0) && (
+        <div className="py-8 text-center text-gray-500">
+          {search ? 'No items match your search.' : 'No items on this order yet. Items are imported when the order is created.'}
+        </div>
+      )}
+
+      {!isLoading && filtered && filtered.length > 0 && (
+        <div className="space-y-2">
+          {filtered.map((item) => (
+            <OrderItemRow
+              key={item.id}
+              item={item}
+              orderId={orderId}
+              onPatch={patchItem}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ChairTab({ orderId, isEditable }: { orderId: string; isEditable: boolean }) {
+  const wide = useIsWide()
+  return wide ? (
+    <div className="grid grid-cols-[1fr_380px] gap-4 h-full">
+      <OrderingGrid orderId={orderId} isEditable={isEditable} />
+      <KayleePanel orderId={orderId} />
+    </div>
+  ) : (
+    <div className="flex flex-col gap-4">
+      <OrderingGrid orderId={orderId} isEditable={isEditable} />
+    </div>
+  )
+}
+
+const SUCCESS_DURATION_MS = 3000
+
+function ExportCSVButton({ orderId }: { orderId: string }) {
+  const [exportSuccess, setExportSuccess] = useState(false)
+
+  const handleExport = useCallback(async () => {
+    const resp = await fetch(`/v1/orders/${orderId}/export/csv`, { credentials: 'include' })
+    if (!resp.ok) return
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = resp.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'order-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    setExportSuccess(true)
+    setTimeout(() => setExportSuccess(false), SUCCESS_DURATION_MS)
+  }, [orderId])
+
+  return (
+    <Button variant="outline" onClick={handleExport}>
+      {exportSuccess ? '✓ Downloaded' : 'Export CSV'}
+    </Button>
+  )
 }
 
 export function OrderDetail() {
@@ -665,6 +926,7 @@ export function OrderDetail() {
             <>
               <span className={cn('text-sm italic', getMutedTextClass(uiMode))}>Read-only</span>
               <Badge className={uiMode === 'dark' ? 'bg-emerald-900 text-emerald-200' : 'bg-green-100 text-green-800'}>Submitted</Badge>
+              <ExportCSVButton orderId={order.id} />
               <Button
                 disabled={isPending}
                 className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
