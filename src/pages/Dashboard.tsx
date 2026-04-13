@@ -262,7 +262,7 @@ function OrderRow({
                 </button>
                 <button
                   type="button"
-                  className={outlineBtn}
+                  className={primaryBtn}
                   onClick={() => navigate(`/orders/${order.id}`)}
                 >
                   Worksheet
@@ -299,7 +299,7 @@ function OrderRow({
 }
 
 // ── Create order modal ─────────────────────────────────────────────────────
-function CreateOrderModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CreateOrderModal({ open, onClose, uiMode }: { open: boolean; onClose: () => void; uiMode: UiMode }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data: adapters = [] } = useVendorAdapters()
@@ -342,15 +342,28 @@ function CreateOrderModal({ open, onClose }: { open: boolean; onClose: () => voi
   }
 
   return (
-    <DialogContent>
+    <DialogContent
+      className={cn(
+        uiMode === 'dark'
+          ? 'bg-[#152640] border border-[#2B4360] text-slate-100'
+          : 'bg-white',
+      )}
+      overlayClassName={uiMode === 'dark' ? 'bg-[#020617]/70' : undefined}
+    >
       <form onSubmit={handleSubmit}>
         <DialogHeader>
           <DialogTitle>Start New Order</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 my-4">
           <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="vendor">Vendor</label>
-            <Select id="vendor" value={vendorId} onValueChange={setVendorId} required>
+            <label className={cn('block text-sm font-medium mb-1', uiMode === 'dark' ? 'text-slate-200' : '')} htmlFor="vendor">Vendor</label>
+            <Select
+              id="vendor"
+              value={vendorId}
+              onValueChange={setVendorId}
+              required
+              className={uiMode === 'dark' ? 'border-[#3C5678] bg-[#0F1E33] text-slate-100 focus:ring-sky-500' : ''}
+            >
               <SelectItem value="">Select a vendor…</SelectItem>
               {adapters.map((a) => (
                 <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
@@ -358,17 +371,18 @@ function CreateOrderModal({ open, onClose }: { open: boolean; onClose: () => voi
             </Select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="order-date">Order Date</label>
+            <label className={cn('block text-sm font-medium mb-1', uiMode === 'dark' ? 'text-slate-200' : '')} htmlFor="order-date">Order Date</label>
             <Input
               id="order-date"
               type="date"
               value={orderDate}
               onChange={(e) => setOrderDate(e.target.value)}
+              className={uiMode === 'dark' ? 'border-[#3C5678] bg-[#0F1E33] text-slate-100 focus:ring-sky-500' : ''}
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" htmlFor="budget">Budget (USD)</label>
+            <label className={cn('block text-sm font-medium mb-1', uiMode === 'dark' ? 'text-slate-200' : '')} htmlFor="budget">Budget (USD)</label>
             <Input
               id="budget"
               type="number"
@@ -377,13 +391,14 @@ function CreateOrderModal({ open, onClose }: { open: boolean; onClose: () => voi
               inputMode="decimal"
               value={budgetDollars}
               onChange={(e) => setBudgetDollars(e.target.value)}
+              className={uiMode === 'dark' ? 'border-[#3C5678] bg-[#0F1E33] text-slate-100 focus:ring-sky-500' : ''}
               placeholder="e.g. 1200.00"
             />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" className={uiMode === 'dark' ? 'border-slate-500 bg-[#0F1E33] text-slate-100 hover:bg-slate-700' : ''} onClick={onClose}>Cancel</Button>
           <Button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create Order'}</Button>
         </DialogFooter>
       </form>
@@ -572,7 +587,7 @@ export function Dashboard() {
       </main>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <CreateOrderModal open={modalOpen} onClose={() => setModalOpen(false)} />
+        <CreateOrderModal open={modalOpen} onClose={() => setModalOpen(false)} uiMode={uiMode} />
       </Dialog>
     </div>
   )

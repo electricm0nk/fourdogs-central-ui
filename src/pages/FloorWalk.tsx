@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { makeChairSkus, type AnimalFilter, type ChairSku } from '@/lib/chairSandboxMock'
+import type { AnimalFilter, ChairSku } from '@/lib/chairSandboxMock'
 import { api } from '@/lib/api'
 import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
 import {
@@ -51,10 +51,9 @@ export function FloorWalk() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: order, isLoading } = useOrder(id ?? '')
-  const fallbackSkus = useMemo(() => makeChairSkus(5_000), [])
   const catalogQuery = useVendorCatalog(order?.vendor_adapter_id)
-  const sourceSkus = catalogQuery.data && catalogQuery.data.length > 0 ? catalogQuery.data : fallbackSkus
-  const catalogSource = catalogQuery.data && catalogQuery.data.length > 0 ? 'live' : 'mock'
+  const sourceSkus = catalogQuery.data ?? []
+  const catalogSource = sourceSkus.length > 0 ? 'live' : 'none'
   const [lineItems, setLineItems] = useState<OrderLine[]>([])
   const [activeTab, setActiveTab] = useState<CatalogTab>('all')
   const [animal, setAnimal] = useState<AnimalFilter>('all')
@@ -306,6 +305,16 @@ export function FloorWalk() {
           <p className={cn('mt-2 text-sm', getMutedTextClass(uiMode))}>
             Walk the floor first, capture low-stock and stockout patterns, then continue to worksheet for ordering.
           </p>
+            {catalogQuery.isError && (
+              <p className="mt-2 text-sm text-red-600">
+                Live catalog unavailable from central API. Fix auth/session and retry.
+              </p>
+            )}
+            {!catalogQuery.isLoading && !catalogQuery.isError && sourceSkus.length === 0 && (
+              <p className="mt-2 text-sm text-amber-600">
+                Live catalog returned zero items.
+              </p>
+            )}
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -360,6 +369,12 @@ export function FloorWalk() {
               ))}
             </div>
 
+            {!catalogQuery.isLoading && sourceSkus.length === 0 && (
+              <div className={cn('mb-3 rounded border px-3 py-2 text-sm', uiMode === 'dark' ? 'border-red-800 bg-red-950/30 text-red-200' : 'border-red-200 bg-red-50 text-red-700')}>
+                Floor Walk requires live catalog data from central. No mock fallback is used here.
+              </div>
+            )}
+
             <div className={cn('mb-2 flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
               <span>Showing {filteredSkus.length.toLocaleString()} of {sourceSkus.length.toLocaleString()} SKUs</span>
               {catalogQuery.isLoading ? (
@@ -367,7 +382,7 @@ export function FloorWalk() {
               ) : catalogSource === 'live' ? (
                 <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">● live</span>
               ) : (
-                <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">● mock data</span>
+                <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-400">● no live data</span>
               )}
             </div>
 
@@ -524,7 +539,7 @@ export function FloorWalk() {
             <div className="mt-4 flex flex-col gap-2">
               <Button
                 variant="outline"
-                className={cn(uiMode === 'dark' && 'border-slate-600 text-slate-200 hover:bg-slate-800')}
+                className={cn(uiMode === 'dark' && 'border-slate-600 bg-[#0B1424] text-slate-200 hover:bg-slate-800')}
                 onClick={() => navigate('/')}
               >
                 Back to Orders

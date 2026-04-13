@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { makeChairSkus, type AnimalFilter } from '@/lib/chairSandboxMock'
+import type { AnimalFilter } from '@/lib/chairSandboxMock'
 import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
 import {
   compareSkuByNameAndSize,
@@ -36,7 +36,6 @@ import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 
-type ChatMode = 'mock' | 'live'
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
 interface ChatMessage {
@@ -62,10 +61,9 @@ export function OrderDetail() {
   const { data: order, isLoading } = useOrder(id ?? '')
   const { mutate: submitOrder, isPending } = useSubmitOrder()
 
-  const fallbackSkus = useMemo(() => makeChairSkus(1_500), [])
   const catalogQuery = useVendorCatalog(order?.vendor_adapter_id)
-  const mockSkus = catalogQuery.data && catalogQuery.data.length > 0 ? catalogQuery.data : fallbackSkus
-  const catalogSource = catalogQuery.data && catalogQuery.data.length > 0 ? 'live' : 'mock'
+  const sourceSkus = catalogQuery.data ?? []
+  const catalogSource = sourceSkus.length > 0 ? 'live' : 'none'
   const [lineItems, setLineItems] = useState<Array<{ skuId: string; quantity: number }>>([])
   const seededRef = useRef(false)
   const [uiMode, setUiMode] = useState<UiMode>(() => readUiMode())
@@ -81,9 +79,6 @@ export function OrderDetail() {
   const [recTreatsPct, setRecTreatsPct] = useState(25)
   const [recLoading, setRecLoading] = useState(false)
 
-  const [kayleeBase, setKayleeBase] = useState(import.meta.env.VITE_KAYLEE_API_BASE ?? '/dev-api/v1')
-  const [devSessionId, setDevSessionId] = useState('')
-  const [chatMode, setChatMode] = useState<ChatMode>('live')
   const [streamStatus, setStreamStatus] = useState<StreamStatus>('idle')
   const [kayleeError, setKayleeError] = useState('')
   const [draft, setDraft] = useState('')
@@ -96,7 +91,6 @@ export function OrderDetail() {
   ])
 
   const streamRef = useRef<EventSource | null>(null)
-  const mockTimerRef = useRef<number | null>(null)
   const chatBottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -110,9 +104,6 @@ export function OrderDetail() {
       if (streamRef.current) {
         streamRef.current.close()
       }
-      if (mockTimerRef.current !== null) {
-        window.clearInterval(mockTimerRef.current)
-      }
     }
   }, [])
 
@@ -122,7 +113,7 @@ export function OrderDetail() {
     }
   }, [uiMode])
 
-  const skuMap = useMemo(() => new Map(mockSkus.map((sku) => [sku.id, sku])), [mockSkus])
+  const skuMap = useMemo(() => new Map(sourceSkus.map((sku) => [sku.id, sku])), [sourceSkus])
 
   const floorWalkLinesQuery = useQuery({
     queryKey: ['order-floor-walk-lines', id],
@@ -165,17 +156,17 @@ export function OrderDetail() {
   const tabOptions = useMemo(() => {
     const mfrs = Array.from(
       new Set(
-        mockSkus
+        sourceSkus
           .filter((sku) => !['treats', 'frozen', 'wellness'].includes(sku.tab))
           .map((sku) => sku.manufacturer || 'Other'),
       ),
     ).sort()
     return ['all', ...mfrs, 'treats', 'frozen', 'wellness']
-  }, [mockSkus])
+  }, [sourceSkus])
 
   const filteredCatalog = useMemo(() => {
     const lq = wsQuery.trim().toLowerCase()
-    return mockSkus.filter((sku) => {
+    return sourceSkus.filter((sku) => {
       let tabMatch = false
       if (activeTab === 'all') {
         tabMatch = true
@@ -192,7 +183,7 @@ export function OrderDetail() {
       const zeroMatch = hideZeroQty ? qty > 0 : true
       return tabMatch && animalMatch && queryMatch && zeroMatch
     }).sort(compareSkuByNameAndSize)
-  }, [mockSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku])
+  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku])
 
   function tierLabel(tier: 1 | 2 | 3 | 4): string {
     return getPrototypeSignalLabel(tier)
@@ -208,7 +199,7 @@ export function OrderDetail() {
     const treatShare = recTreatsPct / 100
     const velocityRank: Record<string, number> = { fast: 0, medium: 1, slow: 2 }
     const suggestedQty = (v: string) => (v === 'fast' ? 4 : v === 'medium' ? 2 : 1)
-    const sorted = [...mockSkus].sort((a, b) => {
+    const sorted = [...sourceSkus].sort((a, b) => {
       const vd = (velocityRank[a.velocity] ?? 2) - (velocityRank[b.velocity] ?? 2)
       return vd !== 0 ? vd : a.name.localeCompare(b.name)
     })
@@ -241,10 +232,6 @@ export function OrderDetail() {
       streamRef.current.close()
       streamRef.current = null
     }
-    if (mockTimerRef.current !== null) {
-      window.clearInterval(mockTimerRef.current)
-      mockTimerRef.current = null
-    }
   }
 
   function formatMoney(cents: number): string {
@@ -275,49 +262,12 @@ export function OrderDetail() {
     return text.trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 500)
   }
 
-  function startMockStream(operatorText: string) {
-    cleanupStreams()
-    setStreamStatus('streaming')
-
-    const response = `I reviewed your request: "${operatorText}". Focus on top movers, check frozen substitutions, and verify quantity jumps before final submit.`
-    const tokens = response.split(' ')
-    const replyId = `kaylee-${Date.now()}`
-    let index = 0
-
-    setMessages((prev) => [...prev, { id: replyId, role: 'kaylee', text: '' }])
-
-    mockTimerRef.current = window.setInterval(() => {
-      index += 1
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === replyId
-            ? {
-                ...message,
-                text: `${tokens.slice(0, index).join(' ')}${index < tokens.length ? ' ' : ''}`,
-              }
-            : message,
-        ),
-      )
-
-      if (index >= tokens.length) {
-        if (mockTimerRef.current !== null) {
-          window.clearInterval(mockTimerRef.current)
-          mockTimerRef.current = null
-        }
-        setStreamStatus('done')
-      }
-    }, 80)
-  }
-
   async function startLiveStream(operatorText: string) {
     cleanupStreams()
     setStreamStatus('streaming')
     setKayleeError('')
 
-    const apiRoot = kayleeBase.replace(/\/v1$/, '')
-    const candidateRoots = Array.from(
-      new Set([apiRoot, '/dev-api']),
-    )
+    const candidateRoots = ['/dev-api']
     const safeOrderId = order?.id ?? id ?? ''
     if (!safeOrderId) {
       setStreamStatus('error')
@@ -326,7 +276,7 @@ export function OrderDetail() {
     }
 
     let messageResponse: Response | null = null
-    let resolvedRoot = apiRoot
+    let resolvedRoot = '/dev-api'
     let lastStatus = 0
 
     for (const root of candidateRoots) {
@@ -335,7 +285,6 @@ export function OrderDetail() {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...(devSessionId.trim() ? { 'x-dev-session-id': devSessionId.trim() } : {}),
         },
         body: JSON.stringify({ text: operatorText }),
       })
@@ -368,10 +317,6 @@ export function OrderDetail() {
       throw new Error(`POST /kaylee/message failed (HTTP ${lastStatus || 502})`)
     }
 
-    if (resolvedRoot !== apiRoot) {
-      setKayleeBase('/dev-api/v1')
-    }
-
     const messageBody = (await messageResponse.json().catch(() => {
       throw new Error('Kaylee returned an unexpected response (not JSON — session may have expired)')
     })) as Record<string, unknown>
@@ -386,8 +331,7 @@ export function OrderDetail() {
     const replyId = `kaylee-${Date.now()}`
     setMessages((prev) => [...prev, { id: replyId, role: 'kaylee', text: '' }])
 
-    const sid = devSessionId.trim() ? `&sid=${encodeURIComponent(devSessionId.trim())}` : ''
-    const streamUrl = `${resolvedRoot}/v1/orders/${safeOrderId}/kaylee/stream?msg=${encodeURIComponent(streamToken)}${sid}`
+    const streamUrl = `${resolvedRoot}/v1/orders/${safeOrderId}/kaylee/stream?msg=${encodeURIComponent(streamToken)}`
     const es = new EventSource(streamUrl, { withCredentials: true })
     streamRef.current = es
 
@@ -433,22 +377,9 @@ export function OrderDetail() {
     setMessages((prev) => [...prev, { id: `operator-${Date.now()}`, role: 'operator', text: clean }])
 
     try {
-      if (chatMode === 'mock') {
-        startMockStream(clean)
-      } else {
-        await startLiveStream(clean)
-      }
+      await startLiveStream(clean)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to send Kaylee message'
-      const shouldFallbackToMock = /HTTP 502|fetch failed|network|not JSON|unexpected response/i.test(message)
-
-      if (shouldFallbackToMock) {
-        setKayleeError('Live Kaylee is unavailable right now. Using mock stream fallback for this message.')
-        setChatMode('mock')
-        startMockStream(clean)
-        return
-      }
-
       setStreamStatus('error')
       setKayleeError(message)
     }
@@ -571,15 +502,21 @@ export function OrderDetail() {
           </div>
 
           <div className={cn('mb-1 flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
-            <span>Showing {filteredCatalog.length.toLocaleString()} of {mockSkus.length.toLocaleString()} SKUs</span>
+            <span>Showing {filteredCatalog.length.toLocaleString()} of {sourceSkus.length.toLocaleString()} SKUs</span>
             {catalogQuery.isLoading ? (
               <span className="rounded bg-slate-500/20 px-1.5 py-0.5 text-[10px]">loading…</span>
             ) : catalogSource === 'live' ? (
               <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">● live</span>
             ) : (
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">● mock data</span>
+              <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-400">● no live data</span>
             )}
           </div>
+
+          {!catalogQuery.isLoading && sourceSkus.length === 0 && (
+            <div className={cn('mb-2 rounded border px-3 py-2 text-xs', uiMode === 'dark' ? 'border-red-800 bg-red-950/30 text-red-200' : 'border-red-200 bg-red-50 text-red-700')}>
+              Worksheet requires live catalog data from central. No mock fallback is used here.
+            </div>
+          )}
 
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
             <span className={cn('font-semibold', getMutedTextClass(uiMode))}>Legend:</span>
@@ -729,41 +666,9 @@ export function OrderDetail() {
           <h2 className="mb-3 text-base font-semibold">Kaylee Assistant</h2>
 
           <div className="mb-2 flex items-center gap-2">
-            <span className={cn('text-xs', getMutedTextClass(uiMode))}>Chat mode:</span>
-            <div className={getTogglePillClass(uiMode)}>
-              {(['mock', 'live'] as ChatMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  className={cn(
-                    'uppercase',
-                    chatMode === mode ? getActiveToggleBtnClass(uiMode) : getInactiveToggleBtnClass(uiMode),
-                  )}
-                  onClick={() => setChatMode(mode)}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
+            <span className={cn('text-xs', getMutedTextClass(uiMode))}>Chat mode: live</span>
             <span className={cn('ml-auto text-xs', getMutedTextClass(uiMode))}>Status: {streamStatus}</span>
           </div>
-
-          <label className={cn('mb-1 block text-xs font-medium', getMutedTextClass(uiMode))}>Kaylee API Base</label>
-          <input
-            value={kayleeBase}
-            onChange={(event) => setKayleeBase(event.target.value)}
-            className={cn('w-full text-xs', getInputClass(uiMode))}
-            placeholder="/dev-api/v1"
-          />
-
-          <label className={cn('mb-1 mt-2 block text-xs font-medium', getMutedTextClass(uiMode))}>
-            Dev session_id (optional)
-          </label>
-          <input
-            value={devSessionId}
-            onChange={(event) => setDevSessionId(event.target.value)}
-            className={cn('w-full text-xs', getInputClass(uiMode))}
-            placeholder="paste session_id cookie value"
-          />
 
           {kayleeError && <p className="mt-2 rounded bg-rose-50 p-2 text-xs text-rose-700">{kayleeError}</p>}
 
@@ -789,7 +694,7 @@ export function OrderDetail() {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               maxLength={500}
-              placeholder={chatMode === 'live' ? 'Ask Kaylee (live endpoint)' : 'Ask Kaylee (mock stream)'}
+              placeholder="Ask Kaylee (live endpoint)"
               className={cn('flex-1 text-xs', getInputClass(uiMode))}
               disabled={streamStatus === 'streaming'}
             />

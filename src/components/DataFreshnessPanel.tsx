@@ -61,7 +61,7 @@ export function DataFreshnessPanel({ uiMode }: { uiMode?: UiMode }) {
           <Button
             variant="outline"
             size="sm"
-            className={dark ? 'border-[#1a3a1a] text-[#4ade80] hover:bg-[#0a1f0a] font-mono' : ''}
+            className={dark ? 'border-[#1a3a1a] bg-[#071607] text-[#4ade80] hover:bg-[#0a1f0a] hover:text-[#86efac] font-mono' : ''}
             onClick={() => refetch()}
           >
             ↻ Refresh

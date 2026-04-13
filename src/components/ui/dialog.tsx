@@ -14,14 +14,22 @@ function DialogTrigger({ children, asChild: _asChild }: { children: React.ReactN
   return <>{children}</>
 }
 
-function DialogContent({ children, className }: { children: React.ReactNode; className?: string }) {
+function DialogContent({
+  children,
+  className,
+  overlayClassName,
+}: {
+  children: React.ReactNode
+  className?: string
+  overlayClassName?: string
+}) {
   return (
     <div
       role="dialog"
       aria-modal="true"
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${className ?? ''}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 ${overlayClassName ?? ''}`}
     >
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <div className={`rounded-lg shadow-xl p-6 w-full max-w-md mx-4 ${className ?? 'bg-white'}`}>
         {children}
       </div>
     </div>

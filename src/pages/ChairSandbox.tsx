@@ -78,13 +78,11 @@ export function ChairSandbox() {
 
   const [dataMode, setDataMode] = useState<DataMode>('mock')
   const [showCatalogExplorer, setShowCatalogExplorer] = useState(false)
-  const [kayleeBase, setKayleeBase] = useState(import.meta.env.VITE_KAYLEE_API_BASE ?? '/dev-api/v1')
   const [kayleeHealth, setKayleeHealth] = useState('Not connected')
   const [kayleeSkus, setKayleeSkus] = useState<ChairSku[]>([])
   const [kayleeError, setKayleeError] = useState('')
   const [loadingKaylee, setLoadingKaylee] = useState(false)
   const [kayleeLoaded, setKayleeLoaded] = useState(false)
-  const [devSessionId, setDevSessionId] = useState('')
   const [chatMode, setChatMode] = useState<ChatMode>('mock')
   const [streamStatus, setStreamStatus] = useState<StreamStatus>('idle')
   const [orderId, setOrderId] = useState('00000000-0000-0000-0000-000000000001')
@@ -181,9 +179,7 @@ export function ChairSandbox() {
     setLoadingKaylee(true)
     setKayleeError('')
     try {
-      const result = await connectKaylee(kayleeBase, undefined, {
-        sessionId: devSessionId.trim() || undefined,
-      })
+      const result = await connectKaylee('/dev-api/v1')
       setKayleeHealth(`${result.healthSummary} (${result.skus.length} rows)`)
       setKayleeSkus(result.skus)
       setKayleeLoaded(true)
@@ -265,10 +261,7 @@ export function ChairSandbox() {
     setStreamStatus('streaming')
     setKayleeError('')
 
-    const apiRoot = kayleeBase.replace(/\/v1$/, '')
-    const candidateRoots = Array.from(
-      new Set([apiRoot, '/dev-api']),
-    )
+    const candidateRoots = ['/dev-api']
     const safeOrderId = orderId.trim()
     if (!safeOrderId) {
       setStreamStatus('error')
@@ -277,7 +270,7 @@ export function ChairSandbox() {
     }
 
     let messageResponse: Response | null = null
-    let resolvedRoot = apiRoot
+    let resolvedRoot = '/dev-api'
     let lastStatus = 0
 
     for (const root of candidateRoots) {
@@ -286,7 +279,6 @@ export function ChairSandbox() {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...(devSessionId.trim() ? { 'x-dev-session-id': devSessionId.trim() } : {}),
         },
         body: JSON.stringify({ text: operatorText }),
       })
@@ -308,10 +300,6 @@ export function ChairSandbox() {
       throw new Error(`POST /kaylee/message failed (HTTP ${lastStatus || 502})`)
     }
 
-    if (resolvedRoot !== apiRoot) {
-      setKayleeBase('/dev-api/v1')
-    }
-
     const messageBody = (await messageResponse.json()) as Record<string, unknown>
     const streamToken =
       (messageBody.stream_token as string | undefined) ||
@@ -324,8 +312,7 @@ export function ChairSandbox() {
     const replyId = `kaylee-${Date.now()}`
     setMessages((prev) => [...prev, { id: replyId, role: 'kaylee', text: '' }])
 
-    const sid = devSessionId.trim() ? `&sid=${encodeURIComponent(devSessionId.trim())}` : ''
-    const streamUrl = `${resolvedRoot}/v1/orders/${safeOrderId}/kaylee/stream?msg=${encodeURIComponent(streamToken)}${sid}`
+    const streamUrl = `${resolvedRoot}/v1/orders/${safeOrderId}/kaylee/stream?msg=${encodeURIComponent(streamToken)}`
     const es = new EventSource(streamUrl, { withCredentials: true })
     streamRef.current = es
 
@@ -511,7 +498,6 @@ export function ChairSandbox() {
               size="sm"
               variant="outline"
               onClick={() => {
-                setKayleeBase('/dev-api/v1')
                 setDataMode('kaylee')
               }}
             >
@@ -519,24 +505,6 @@ export function ChairSandbox() {
             </Button>
             <span className="text-xs text-slate-500">Preset uses fourdogs-central dev catalog endpoint</span>
           </div>
-
-          <label className="mb-1 block text-xs font-medium text-slate-600">Catalog API Base</label>
-          <input
-            value={kayleeBase}
-            onChange={(event) => setKayleeBase(event.target.value)}
-            className="w-full rounded border border-slate-300 px-2 py-2 text-xs"
-            placeholder="/dev-api/v1"
-          />
-
-          <label className="mb-1 mt-2 block text-xs font-medium text-slate-600">
-            Dev session_id (optional, for protected dev API)
-          </label>
-          <input
-            value={devSessionId}
-            onChange={(event) => setDevSessionId(event.target.value)}
-            className="w-full rounded border border-slate-300 px-2 py-2 text-xs"
-            placeholder="paste session_id cookie value"
-          />
 
           <div className="mt-2 flex items-center gap-2">
             <Button size="sm" onClick={refreshKaylee} disabled={loadingKaylee}>
