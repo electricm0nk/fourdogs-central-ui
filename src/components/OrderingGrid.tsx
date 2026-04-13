@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { useOrderItems } from '@/hooks/use_order_items'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
+import { useLogLearning } from '@/hooks/use_log_learning'
+import { resolveActionType } from '@/lib/resolve_action_type'
 import { ConfidenceBadge } from './ConfidenceBadge'
 
 function ghostQtyCell(item: {
@@ -26,11 +28,13 @@ function EditableQtyCell({
   itemId,
   orderId,
   onPatch,
+  onLog,
 }: {
   value: number
   itemId: string
   orderId: string
   onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
+  onLog?: (finalQty: number) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [localQty, setLocalQty] = useState(value)
@@ -39,6 +43,7 @@ function EditableQtyCell({
   function commit(qty: number) {
     committedRef.current = true
     onPatch({ orderId, itemId, final_qty: qty })
+    onLog?.(qty)
     setEditing(false)
   }
 
@@ -100,6 +105,7 @@ export function OrderingGrid({
 }) {
   const { data: items, isLoading } = useOrderItems(orderId)
   const { mutate: patchItem } = usePatchOrderItem()
+  const logLearning = useLogLearning()
 
   return (
     <div data-testid="ordering-grid" className="rounded-lg border bg-white overflow-hidden">
@@ -151,6 +157,16 @@ export function OrderingGrid({
                       itemId={item.id}
                       orderId={orderId}
                       onPatch={patchItem}
+                      onLog={(finalQty) =>
+                        logLearning({
+                          orderId,
+                          itemSku: item.item_id,
+                          actionType: resolveActionType(item, finalQty),
+                          kayleeRecQty: item.ghost_qty ?? null,
+                          finalQty,
+                          confidenceTier: item.confidence_tier ?? null,
+                        })
+                      }
                     />
                   ) : (
                     item.final_qty
