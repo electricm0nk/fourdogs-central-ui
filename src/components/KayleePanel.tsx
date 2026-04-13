@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { KayleeStream } from './KayleeStream'
+import { KayleeMessage } from './KayleeMessage'
 import { useOrderItems } from '@/hooks/use_order_items'
 import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
 
@@ -13,6 +14,8 @@ export function KayleePanel({ orderId }: { orderId: string }) {
     }
   }, [items, orderId, analyze])
 
+  const tier4Items = items?.filter((item) => item.confidence_tier === 4) ?? []
+
   return (
     <aside
       data-testid="kaylee-panel"
@@ -25,7 +28,18 @@ export function KayleePanel({ orderId }: { orderId: string }) {
       {isError && (
         <p className="text-sm text-amber-700">Kaylee is unavailable right now.</p>
       )}
-      {!isPending && !isError && <KayleeStream orderId={orderId} />}
+      {!isPending && !isError && (
+        <div className="flex flex-col gap-2">
+          <KayleeStream orderId={orderId} />
+          {tier4Items.map((item) => (
+            <KayleeMessage
+              key={item.id}
+              role="kaylee"
+              text={`I'm not very confident about ${item.item_name}. Want to talk through it?`}
+            />
+          ))}
+        </div>
+      )}
     </aside>
   )
 }
