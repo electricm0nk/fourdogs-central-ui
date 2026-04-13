@@ -34,14 +34,31 @@ export function KayleePanel({ orderId }: { orderId: string }) {
       )}
       {!isPending && !isError && (
         <div className="flex flex-col gap-2 flex-1 min-h-0">
-          <KayleeStream tokens={tokens} status={status} />
-          {tier4Items.map((item) => (
-            <KayleeMessage
-              key={item.id}
-              role="kaylee"
-              text={`I'm not very confident about ${item.item_name}. Want to talk through it?`}
-            />
-          ))}
+          {(status === 'timeout' || status === 'error') ? (
+            <div className="flex flex-col gap-3">
+              <KayleeMessage
+                role="kaylee"
+                text="Hmm, I'm taking longer than usual. The grid is all yours — I'll be here if you need me."
+              />
+              <button
+                className="self-start text-sm text-blue-600 underline hover:text-blue-800"
+                onClick={start}
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <>
+              <KayleeStream tokens={tokens} status={status} />
+              {tier4Items.map((item) => (
+                <KayleeMessage
+                  key={item.id}
+                  role="kaylee"
+                  text={`I'm not very confident about ${item.item_name}. Want to talk through it?`}
+                />
+              ))}
+            </>
+          )}
         </div>
       )}
     </aside>
