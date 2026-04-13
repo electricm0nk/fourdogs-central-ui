@@ -1,15 +1,12 @@
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router'
 import { LoginPage } from '@/pages/LoginPage'
+import { Dashboard } from '@/pages/Dashboard'
+import { OrderDetail } from '@/pages/OrderDetail'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 // Root layout — wraps all routes
 function RootLayout() {
   return <Outlet />
-}
-
-// Placeholder pages — will be replaced in later stories
-function Dashboard() {
-  return <div className="p-4">Dashboard (Story 2.2)</div>
 }
 
 function NotFound() {
@@ -26,6 +23,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'orders/:id',
+        element: (
+          <ProtectedRoute>
+            <OrderDetail />
           </ProtectedRoute>
         ),
       },
