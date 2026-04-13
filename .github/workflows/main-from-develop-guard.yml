@@ -1,0 +1,28 @@
+name: Main From Develop Guard
+
+on:
+  pull_request_target:
+    branches:
+      - main
+
+jobs:
+  require-develop-source:
+    name: require-develop-source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless PR source branch is develop
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [[ "$BASE_REF" != "main" ]]; then
+            echo "Not a PR to main; guard not applicable."
+            exit 0
+          fi
+
+          if [[ "$HEAD_REF" != "develop" ]]; then
+            echo "::error::PRs into main must originate from develop. Found source branch: $HEAD_REF"
+            exit 1
+          fi
+
+          echo "Source branch is develop; guard passed."
