@@ -4,10 +4,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConnectivityBadge } from '@/components/ConnectivityBadge'
+import { KayleePanel } from '@/components/KayleePanel'
+import { OrderingGrid } from '@/components/OrderingGrid'
 import { useOrder } from '@/hooks/use_order'
 import { useOrderItems } from '@/hooks/use_order_items'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
+import { useIsWide } from '@/hooks/use_is_wide'
 import type { OrderItem } from '@/types/order_item'
 
 const DEBOUNCE_MS = 300
@@ -238,6 +241,20 @@ function FloorWalkTab({ orderId }: { orderId: string }) {
   )
 }
 
+function ChairTab({ orderId }: { orderId: string }) {
+  const wide = useIsWide()
+  return wide ? (
+    <div className="grid grid-cols-[1fr_380px] gap-4 h-full">
+      <OrderingGrid orderId={orderId} />
+      <KayleePanel orderId={orderId} />
+    </div>
+  ) : (
+    <div className="flex flex-col gap-4">
+      <OrderingGrid orderId={orderId} />
+    </div>
+  )
+}
+
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -323,11 +340,7 @@ export function OrderDetail() {
 
         {/* Tab content */}
         {activeTab === 'floorwalk' && <FloorWalkTab orderId={order.id} />}
-        {activeTab === 'chair' && (
-          <div className="py-8 text-center text-gray-400">
-            Chair Phase (Epic 4)
-          </div>
-        )}
+        {activeTab === 'chair' && <ChairTab orderId={order.id} />}
       </div>
     </div>
   )
