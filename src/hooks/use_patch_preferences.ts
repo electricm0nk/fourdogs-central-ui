@@ -4,8 +4,8 @@ import { api } from '@/lib/api'
 export function usePatchPreferences() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (prefs: { kaylee_mode: 'chatty' | 'sleepy' }) =>
-      api.patch<{ data: { kaylee_mode: string } }>('/v1/me/preferences', prefs),
+    mutationFn: (prefs: { kaylee_mode?: 'chatty' | 'sleepy'; onboarding_shown?: boolean }) =>
+      api.patch<{ data: { kaylee_mode?: string; onboarding_shown?: boolean } }>('/v1/me/preferences', prefs),
     onMutate: async (prefs) => {
       await qc.cancelQueries({ queryKey: ['me'] })
       const prev = qc.getQueryData(['me'])

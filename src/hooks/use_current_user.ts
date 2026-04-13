@@ -7,6 +7,7 @@ export interface User {
   name: string
   preferences?: {
     kaylee_mode?: 'chatty' | 'sleepy'
+    onboarding_shown?: boolean
   }
 }
 

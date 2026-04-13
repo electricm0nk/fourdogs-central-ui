@@ -7,6 +7,7 @@ import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
 import { useKayleeStream } from '@/hooks/use_kaylee_stream'
 import { useCurrentUser } from '@/hooks/use_current_user'
 import { useKayleeMessage } from '@/hooks/use_kaylee_message'
+import { usePatchPreferences } from '@/hooks/use_patch_preferences'
 import type { OrderItem } from '@/types/order_item'
 import type { User } from '@/hooks/use_current_user'
 
@@ -15,6 +16,7 @@ vi.mock('@/hooks/use_kaylee_analyze', () => ({ useKayleeAnalyze: vi.fn() }))
 vi.mock('@/hooks/use_kaylee_stream', () => ({ useKayleeStream: vi.fn() }))
 vi.mock('@/hooks/use_current_user', () => ({ useCurrentUser: vi.fn() }))
 vi.mock('@/hooks/use_kaylee_message', () => ({ useKayleeMessage: vi.fn() }))
+vi.mock('@/hooks/use_patch_preferences', () => ({ usePatchPreferences: vi.fn() }))
 
 const testOrderId = '00000000-0000-0000-0000-000000000001'
 
@@ -36,12 +38,12 @@ const chattyUser: User = {
   google_sub: 'sub-123',
   email: 'operator@test.com',
   name: 'Operator',
-  preferences: { kaylee_mode: 'chatty' },
+  preferences: { kaylee_mode: 'chatty', onboarding_shown: true },
 }
 
 const sleepyUser: User = {
   ...chattyUser,
-  preferences: { kaylee_mode: 'sleepy' },
+  preferences: { kaylee_mode: 'sleepy', onboarding_shown: true },
 }
 
 function wrap() {
@@ -79,6 +81,10 @@ describe('KayleePanel — chat messages', () => {
     vi.mocked(useKayleeMessage).mockReturnValue({
       sendMessage: mockSendMessage,
     })
+    vi.mocked(usePatchPreferences).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof usePatchPreferences>)
   })
 
   it('shows chat input when stream is done and mode is chatty', () => {
