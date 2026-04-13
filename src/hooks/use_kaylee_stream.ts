@@ -10,13 +10,16 @@ export function useKayleeStream(orderId: string) {
   const esRef = useRef<EventSource | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const start = useCallback(() => {
+  const start = useCallback((msgToken?: string) => {
     esRef.current?.close()
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     setTokens([])
     setStatus('streaming')
 
-    const es = new EventSource(`/v1/orders/${orderId}/kaylee/stream`, {
+    const url = msgToken
+      ? `/v1/orders/${orderId}/kaylee/stream?msg=${encodeURIComponent(msgToken)}`
+      : `/v1/orders/${orderId}/kaylee/stream`
+    const es = new EventSource(url, {
       withCredentials: true,
     })
     esRef.current = es
