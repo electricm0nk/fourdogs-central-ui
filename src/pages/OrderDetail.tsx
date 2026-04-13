@@ -11,6 +11,7 @@ import { useOrderItems } from '@/hooks/use_order_items'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
 import { useIsWide } from '@/hooks/use_is_wide'
+import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
 import type { OrderItem } from '@/types/order_item'
 
 const DEBOUNCE_MS = 300
@@ -257,7 +258,7 @@ function ChairTab({ orderId, isEditable }: { orderId: string; isEditable: boolea
 
 const SUCCESS_DURATION_MS = 3000
 
-function ExportCSVButton({ orderId }: { orderId: string }) {
+function ExportButton({ orderId, label }: { orderId: string; label: string }) {
   const [exportSuccess, setExportSuccess] = useState(false)
 
   const handleExport = useCallback(async () => {
@@ -276,7 +277,7 @@ function ExportCSVButton({ orderId }: { orderId: string }) {
 
   return (
     <Button variant="outline" onClick={handleExport}>
-      {exportSuccess ? '✓ Downloaded' : 'Export CSV'}
+      {exportSuccess ? '✓ Downloaded' : label}
     </Button>
   )
 }
@@ -288,6 +289,8 @@ export function OrderDetail() {
   const activeTab = searchParams.get('tab') ?? 'floorwalk'
   const { data: order, isLoading } = useOrder(id ?? '')
   const { mutate: submitOrder, isPending } = useSubmitOrder()
+  const { data: vendorAdapters } = useVendorAdapters()
+  const adapterType = vendorAdapters?.find((a) => a.id === order?.vendor_adapter_id)?.adapter_type ?? ''
 
   if (isLoading || !order) {
     return (
@@ -311,7 +314,10 @@ export function OrderDetail() {
             <>
               <span className="text-sm text-gray-500 italic">Read-only</span>
               <Badge className="bg-green-100 text-green-800">Submitted</Badge>
-              <ExportCSVButton orderId={order.id} />
+              <ExportButton orderId={order.id} label="Export CSV" />
+              {adapterType === 'etailpet' && (
+                <ExportButton orderId={order.id} label="Export EtailPet" />
+              )}
               <Button
                 variant="outline"
                 disabled={isPending}
