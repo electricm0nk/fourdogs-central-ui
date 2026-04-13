@@ -14,6 +14,8 @@ export function usePatchOrderItem() {
   return useMutation({
     mutationFn: ({ orderId, itemId, ...body }: PatchOrderItemArgs) =>
       api.patch<{ data: OrderItem }>(`/v1/orders/${orderId}/items/${itemId}`, body),
+    retry: 3,
+    retryDelay: (attempt) => Math.pow(2, attempt + 1) * 1000, // 2s, 4s, 8s
     onSuccess: (_data, { orderId }) => {
       qc.invalidateQueries({ queryKey: ['orders', orderId, 'items'] })
     },

@@ -1,13 +1,16 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ConnectivityBadge } from '@/components/ConnectivityBadge'
 import { useOrder } from '@/hooks/use_order'
 import { useOrderItems } from '@/hooks/use_order_items'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
 import type { OrderItem } from '@/types/order_item'
+
+const DEBOUNCE_MS = 300
 
 function formatOrderDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
@@ -27,61 +30,115 @@ function QtyControl({
   value,
   itemId,
   orderId,
+  mustHave,
   onPatch,
 }: {
   value: number
   itemId: string
   orderId: string
+  mustHave?: boolean
   onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
 }) {
   const [localQty, setLocalQty] = useState(value)
+  const [pendingZero, setPendingZero] = useState(false)
+  const [prevQty, setPrevQty] = useState(value)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function fireDebounced(qty: number) {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      onPatch({ orderId, itemId, final_qty: qty })
+    }, DEBOUNCE_MS)
+  }
 
   function handleIncrement() {
     const next = localQty + 1
     setLocalQty(next)
-    onPatch({ orderId, itemId, final_qty: next })
+    fireDebounced(next)
   }
 
   function handleDecrement() {
     if (localQty <= 0) return
     const next = localQty - 1
+    if (next === 0 && mustHave) {
+      setPrevQty(localQty)
+      setLocalQty(0)
+      setPendingZero(true)
+      return
+    }
     setLocalQty(next)
-    onPatch({ orderId, itemId, final_qty: next })
+    fireDebounced(next)
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = parseInt(e.target.value, 10)
     if (isNaN(val) || val < 0) return
+    if (val === 0 && mustHave && localQty > 0) {
+      setPrevQty(localQty)
+      setLocalQty(0)
+      setPendingZero(true)
+      return
+    }
     setLocalQty(val)
-    onPatch({ orderId, itemId, final_qty: val })
+    fireDebounced(val)
+  }
+
+  function confirmZero() {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    setPendingZero(false)
+    onPatch({ orderId, itemId, final_qty: 0 })
+  }
+
+  function cancelZero() {
+    setPendingZero(false)
+    setLocalQty(prevQty)
   }
 
   return (
-    <div className="flex items-center gap-1">
-      <button
-        className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100 disabled:opacity-40"
-        onClick={handleDecrement}
-        disabled={localQty <= 0}
-        aria-label="-"
-      >
-        −
-      </button>
-      <input
-        type="number"
-        inputMode="numeric"
-        value={localQty}
-        onChange={handleChange}
-        className="w-14 text-center border rounded h-11 text-sm"
-        min={0}
-      />
-      <button
-        className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100"
-        onClick={handleIncrement}
-        aria-label="+"
-      >
-        +
-      </button>
-    </div>
+    <>
+      {pendingZero && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="absolute z-10 rounded-md border bg-white p-3 shadow-lg text-sm space-y-2 w-56"
+        >
+          <p className="font-medium">This is a must-have item. Set to 0?</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" onClick={confirmZero}>
+              Yes, set to 0
+            </Button>
+            <Button size="sm" variant="outline" onClick={cancelZero}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-1">
+        <button
+          className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100 disabled:opacity-40"
+          onClick={handleDecrement}
+          disabled={localQty <= 0}
+          aria-label="-"
+        >
+          −
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          value={localQty}
+          onChange={handleChange}
+          className="w-14 text-center border rounded h-11 text-sm"
+          min={0}
+        />
+        <button
+          className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100"
+          onClick={handleIncrement}
+          aria-label="+"
+        >
+          +
+        </button>
+      </div>
+    </>
   )
 }
 
@@ -96,7 +153,7 @@ function OrderItemRow({
 }) {
   return (
     <div
-      className={`flex items-center justify-between min-h-[48px] p-3 rounded-md border ${
+      className={`relative flex items-center justify-between min-h-[48px] p-3 rounded-md border ${
         item.must_have ? 'border-amber-400 bg-amber-50' : 'bg-white'
       }`}
     >
@@ -112,6 +169,7 @@ function OrderItemRow({
           value={item.final_qty}
           itemId={item.id}
           orderId={orderId}
+          mustHave={item.must_have}
           onPatch={onPatch}
         />
       </div>
@@ -122,7 +180,7 @@ function OrderItemRow({
 function FloorWalkTab({ orderId }: { orderId: string }) {
   const [search, setSearch] = useState('')
   const { data: items, isLoading } = useOrderItems(orderId)
-  const { mutate: patchItem } = usePatchOrderItem()
+  const { mutate: patchItem, isPending } = usePatchOrderItem()
 
   const filtered = items?.filter(
     (item) =>
@@ -133,6 +191,8 @@ function FloorWalkTab({ orderId }: { orderId: string }) {
 
   return (
     <div className="space-y-3">
+      <ConnectivityBadge isSyncing={isPending} />
+
       <div className="relative">
         <Input
           placeholder="Search items…"

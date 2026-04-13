@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { OrderDetail } from '@/pages/OrderDetail'
@@ -124,26 +124,32 @@ describe('Floor Walk Search & Qty Controls', () => {
   })
 
   it('increment + button fires mutation with final_qty + 1', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     render(wrapper(mockOrder.id))
     // Bark Biscuits has final_qty=3, click + button
     const plusButtons = screen.getAllByRole('button', { name: /\+/ })
     fireEvent.click(plusButtons[0])
+    act(() => { vi.advanceTimersByTime(350) })
     expect(mockPatch).toHaveBeenCalledWith({
       orderId: mockOrder.id,
       itemId: itemA.id,
       final_qty: 4,
     })
+    vi.useRealTimers()
   })
 
   it('decrement - button fires mutation with final_qty - 1', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     render(wrapper(mockOrder.id))
     const minusButtons = screen.getAllByRole('button', { name: /-/ })
     fireEvent.click(minusButtons[0])
+    act(() => { vi.advanceTimersByTime(350) })
     expect(mockPatch).toHaveBeenCalledWith({
       orderId: mockOrder.id,
       itemId: itemA.id,
       final_qty: 2,
     })
+    vi.useRealTimers()
   })
 
   it('cannot decrement below 0', () => {
