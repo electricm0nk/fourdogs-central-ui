@@ -19,6 +19,9 @@ vi.mock('@/hooks/use_order_mutations', () => ({
 }))
 vi.mock('@/hooks/use_patch_order_item', () => ({ usePatchOrderItem: vi.fn() }))
 vi.mock('@/hooks/use_kaylee_analyze', () => ({ useKayleeAnalyze: vi.fn() }))
+vi.mock('@/hooks/use_kaylee_stream', () => ({
+  useKayleeStream: vi.fn(() => ({ tokens: [], status: 'idle', start: vi.fn() })),
+}))
 
 const mockOrder: Order = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -117,7 +120,7 @@ describe('Kaylee Analyze — Frontend Trigger', () => {
 
     render(wrapChair(mockOrder.id))
 
-    expect(mockAnalyze).toHaveBeenCalledWith(mockOrder.id)
+    expect(mockAnalyze).toHaveBeenCalledWith(mockOrder.id, expect.objectContaining({ onSuccess: expect.any(Function) }))
   })
 
   it('does not call analyze when all items have ghost_qty set', () => {
