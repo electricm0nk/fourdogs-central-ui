@@ -8,4 +8,6 @@ export interface FreshnessEntry {
 export interface DataFreshnessResponse {
   inventory: FreshnessEntry
   sales: FreshnessEntry
+  transactions?: FreshnessEntry
+  vendor_product_mapping?: FreshnessEntry
 }
