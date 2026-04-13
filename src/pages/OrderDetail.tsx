@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { useOrder } from '@/hooks/use_order'
 import { useOrderItems } from '@/hooks/use_order_items'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
+import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
 import type { OrderItem } from '@/types/order_item'
 
 function formatOrderDate(dateStr: string): string {
@@ -20,7 +23,77 @@ function ItemSkeleton() {
   )
 }
 
-function OrderItemRow({ item }: { item: OrderItem }) {
+function QtyControl({
+  value,
+  itemId,
+  orderId,
+  onPatch,
+}: {
+  value: number
+  itemId: string
+  orderId: string
+  onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
+}) {
+  const [localQty, setLocalQty] = useState(value)
+
+  function handleIncrement() {
+    const next = localQty + 1
+    setLocalQty(next)
+    onPatch({ orderId, itemId, final_qty: next })
+  }
+
+  function handleDecrement() {
+    if (localQty <= 0) return
+    const next = localQty - 1
+    setLocalQty(next)
+    onPatch({ orderId, itemId, final_qty: next })
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = parseInt(e.target.value, 10)
+    if (isNaN(val) || val < 0) return
+    setLocalQty(val)
+    onPatch({ orderId, itemId, final_qty: val })
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100 disabled:opacity-40"
+        onClick={handleDecrement}
+        disabled={localQty <= 0}
+        aria-label="-"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        inputMode="numeric"
+        value={localQty}
+        onChange={handleChange}
+        className="w-14 text-center border rounded h-11 text-sm"
+        min={0}
+      />
+      <button
+        className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100"
+        onClick={handleIncrement}
+        aria-label="+"
+      >
+        +
+      </button>
+    </div>
+  )
+}
+
+function OrderItemRow({
+  item,
+  orderId,
+  onPatch,
+}: {
+  item: OrderItem
+  orderId: string
+  onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
+}) {
   return (
     <div
       className={`flex items-center justify-between min-h-[48px] p-3 rounded-md border ${
@@ -35,36 +108,72 @@ function OrderItemRow({ item }: { item: OrderItem }) {
         {item.must_have && (
           <Badge className="bg-amber-100 text-amber-800 text-xs">Must-Have</Badge>
         )}
-        <span className="text-sm font-medium w-8 text-right">{item.final_qty}</span>
+        <QtyControl
+          value={item.final_qty}
+          itemId={item.id}
+          orderId={orderId}
+          onPatch={onPatch}
+        />
       </div>
     </div>
   )
 }
 
 function FloorWalkTab({ orderId }: { orderId: string }) {
+  const [search, setSearch] = useState('')
   const { data: items, isLoading } = useOrderItems(orderId)
+  const { mutate: patchItem } = usePatchOrderItem()
 
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {[...Array(5)].map((_, i) => <ItemSkeleton key={i} />)}
-      </div>
-    )
-  }
-
-  if (!items || items.length === 0) {
-    return (
-      <div className="py-8 text-center text-gray-500">
-        No items on this order yet. Items are imported when the order is created.
-      </div>
-    )
-  }
+  const filtered = items?.filter(
+    (item) =>
+      search === '' ||
+      item.item_name.toLowerCase().includes(search.toLowerCase()) ||
+      item.item_id.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
-    <div className="space-y-2">
-      {items.map((item) => (
-        <OrderItemRow key={item.id} item={item} />
-      ))}
+    <div className="space-y-3">
+      <div className="relative">
+        <Input
+          placeholder="Search items…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            onClick={() => setSearch('')}
+            aria-label="Clear search"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => <ItemSkeleton key={i} />)}
+        </div>
+      )}
+
+      {!isLoading && (!filtered || filtered.length === 0) && (
+        <div className="py-8 text-center text-gray-500">
+          {search ? 'No items match your search.' : 'No items on this order yet. Items are imported when the order is created.'}
+        </div>
+      )}
+
+      {!isLoading && filtered && filtered.length > 0 && (
+        <div className="space-y-2">
+          {filtered.map((item) => (
+            <OrderItemRow
+              key={item.id}
+              item={item}
+              orderId={orderId}
+              onPatch={patchItem}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
