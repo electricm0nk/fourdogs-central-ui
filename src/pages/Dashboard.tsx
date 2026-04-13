@@ -14,6 +14,7 @@ import {
 import { Select, SelectItem } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { DataFreshnessPanel } from '@/components/DataFreshnessPanel'
+import { KaylaeModeToggle } from '@/components/KaylaeModeToggle'
 import { useOrders } from '@/hooks/use_orders'
 import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
 import { useArchiveOrder } from '@/hooks/use_order_mutations'
@@ -167,7 +168,10 @@ export function Dashboard() {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Orders</h1>
-          <Button onClick={() => setModalOpen(true)}>Start New Order</Button>
+          <div className="flex items-center gap-2">
+            <KaylaeModeToggle />
+            <Button onClick={() => setModalOpen(true)}>Start New Order</Button>
+          </div>
         </div>
 
         <DataFreshnessPanel />

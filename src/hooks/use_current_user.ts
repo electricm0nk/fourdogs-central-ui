@@ -11,9 +11,10 @@ export interface User {
 }
 
 export function useCurrentUser() {
-  return useQuery<User>({
+  return useQuery({
     queryKey: ['me'],
-    queryFn: () => api.get<User>('/v1/me'),
+    queryFn: () => api.get<{ data: User }>('/v1/me'),
+    select: (res) => res.data,
     retry: false,
     staleTime: 5 * 60 * 1000,
   })
