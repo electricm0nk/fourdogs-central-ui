@@ -32,6 +32,7 @@ const tier2Item: OrderItem = {
   final_qty: 0,
   ghost_qty: 5,
   confidence_tier: 2,
+  is_special_order: false,
 }
 
 const tier1Item: OrderItem = {
@@ -46,6 +47,7 @@ const tier1Item: OrderItem = {
   final_qty: 4,
   ghost_qty: 4,
   confidence_tier: 1,
+  is_special_order: false,
 }
 
 const tier4Item: OrderItem = {
@@ -60,6 +62,7 @@ const tier4Item: OrderItem = {
   final_qty: 0,
   ghost_qty: 2,
   confidence_tier: 4,
+  is_special_order: false,
 }
 
 const noGhostItem: OrderItem = {
@@ -74,6 +77,22 @@ const noGhostItem: OrderItem = {
   final_qty: 0,
   ghost_qty: null,
   confidence_tier: null,
+  is_special_order: false,
+}
+
+const specialOrderItem: OrderItem = {
+  id: '00000000-0000-0000-0000-000000000014',
+  order_id: mockOrder.id,
+  item_id: 'SKU-SPECIAL',
+  item_name: 'Exotic Cat Food 6lb',
+  category: null,
+  current_stock_qty: 0,
+  velocity_tier: null,
+  must_have: false,
+  final_qty: 2,
+  ghost_qty: null,
+  confidence_tier: null,
+  is_special_order: true,
 }
 
 function makeGrid(isEditable = true) {
@@ -199,5 +218,30 @@ describe('OrderingGrid', () => {
     expect(within(grid).getByText(/ghost qty/i)).toBeInTheDocument()
     expect(within(grid).getByText(/confidence/i)).toBeInTheDocument()
     expect(within(grid).getByText(/final qty/i)).toBeInTheDocument()
+  })
+})
+
+describe('Special Order badge in OrderingGrid', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(useOrder).mockReturnValue({ data: mockOrder, isLoading: false, error: null } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useSubmitOrder).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useSubmitOrder>)
+    vi.mocked(useArchiveOrder).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useArchiveOrder>)
+    vi.mocked(usePatchOrderItem).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof usePatchOrderItem>)
+    vi.mocked(useKayleeAnalyze).mockReturnValue({ mutate: vi.fn(), isPending: false, data: undefined } as unknown as ReturnType<typeof useKayleeAnalyze>)
+  })
+
+  it('shows "Special Order" badge for is_special_order items', () => {
+    vi.mocked(useOrderItems).mockReturnValue({ data: [specialOrderItem], isLoading: false } as unknown as ReturnType<typeof useOrderItems>)
+    render(wrapChair(mockOrder.id))
+
+    expect(screen.getByText('Special Order')).toBeInTheDocument()
+  })
+
+  it('does not show "Special Order" badge for regular items', () => {
+    vi.mocked(useOrderItems).mockReturnValue({ data: [tier2Item], isLoading: false } as unknown as ReturnType<typeof useOrderItems>)
+    render(wrapChair(mockOrder.id))
+
+    expect(screen.queryByText('Special Order')).not.toBeInTheDocument()
   })
 })
