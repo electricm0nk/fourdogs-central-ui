@@ -3,16 +3,20 @@ import { KayleeStream } from './KayleeStream'
 import { KayleeMessage } from './KayleeMessage'
 import { useOrderItems } from '@/hooks/use_order_items'
 import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
+import { useKayleeStream } from '@/hooks/use_kaylee_stream'
 
 export function KayleePanel({ orderId }: { orderId: string }) {
   const { data: items } = useOrderItems(orderId)
   const { mutate: analyze, isPending, isError } = useKayleeAnalyze()
+  const { tokens, status, start } = useKayleeStream(orderId)
 
   useEffect(() => {
     if (items && items.some((item) => item.ghost_qty === null)) {
-      analyze(orderId)
+      analyze(orderId, {
+        onSuccess: () => start(),
+      })
     }
-  }, [items, orderId, analyze])
+  }, [items, orderId, analyze, start])
 
   const tier4Items = items?.filter((item) => item.confidence_tier === 4) ?? []
 
@@ -29,8 +33,8 @@ export function KayleePanel({ orderId }: { orderId: string }) {
         <p className="text-sm text-amber-700">Kaylee is unavailable right now.</p>
       )}
       {!isPending && !isError && (
-        <div className="flex flex-col gap-2">
-          <KayleeStream orderId={orderId} />
+        <div className="flex flex-col gap-2 flex-1 min-h-0">
+          <KayleeStream tokens={tokens} status={status} />
           {tier4Items.map((item) => (
             <KayleeMessage
               key={item.id}
