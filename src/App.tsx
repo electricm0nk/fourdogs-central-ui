@@ -1,11 +1,12 @@
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router'
+import { LoginPage } from '@/pages/LoginPage'
 
 // Root layout — wraps all routes
 function RootLayout() {
   return <Outlet />
 }
 
-// Placeholder pages — will be replaced in Stories 1.2+
+// Placeholder pages — will be replaced in later stories
 function Dashboard() {
   return <div className="p-4">Dashboard (Story 2.2)</div>
 }
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { index: true, element: <Dashboard /> },
+      { path: 'login', element: <LoginPage /> },
       { path: '*', element: <NotFound /> },
     ],
   },
