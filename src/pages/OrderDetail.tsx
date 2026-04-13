@@ -241,16 +241,16 @@ function FloorWalkTab({ orderId }: { orderId: string }) {
   )
 }
 
-function ChairTab({ orderId }: { orderId: string }) {
+function ChairTab({ orderId, isEditable }: { orderId: string; isEditable: boolean }) {
   const wide = useIsWide()
   return wide ? (
     <div className="grid grid-cols-[1fr_380px] gap-4 h-full">
-      <OrderingGrid orderId={orderId} />
+      <OrderingGrid orderId={orderId} isEditable={isEditable} />
       <KayleePanel orderId={orderId} />
     </div>
   ) : (
     <div className="flex flex-col gap-4">
-      <OrderingGrid orderId={orderId} />
+      <OrderingGrid orderId={orderId} isEditable={isEditable} />
     </div>
   )
 }
@@ -340,7 +340,7 @@ export function OrderDetail() {
 
         {/* Tab content */}
         {activeTab === 'floorwalk' && <FloorWalkTab orderId={order.id} />}
-        {activeTab === 'chair' && <ChairTab orderId={order.id} />}
+        {activeTab === 'chair' && <ChairTab orderId={order.id} isEditable={!order.submitted && !order.archived} />}
       </div>
     </div>
   )
