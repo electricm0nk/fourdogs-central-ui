@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Dashboard } from '@/pages/Dashboard'
@@ -88,7 +88,7 @@ describe('Dashboard', () => {
 
     render(wrapper(<Dashboard />))
 
-    expect(screen.getByText(/data freshness/i)).toBeInTheDocument()
+    expect(screen.getByText(/data freshness loading/i)).toBeInTheDocument()
   })
 
   it('shows "Start New Order" button', () => {
