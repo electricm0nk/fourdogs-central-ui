@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -255,6 +255,32 @@ function ChairTab({ orderId, isEditable }: { orderId: string; isEditable: boolea
   )
 }
 
+const SUCCESS_DURATION_MS = 3000
+
+function ExportCSVButton({ orderId }: { orderId: string }) {
+  const [exportSuccess, setExportSuccess] = useState(false)
+
+  const handleExport = useCallback(async () => {
+    const resp = await fetch(`/v1/orders/${orderId}/export/csv`, { credentials: 'include' })
+    if (!resp.ok) return
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = resp.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'order-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    setExportSuccess(true)
+    setTimeout(() => setExportSuccess(false), SUCCESS_DURATION_MS)
+  }, [orderId])
+
+  return (
+    <Button variant="outline" onClick={handleExport}>
+      {exportSuccess ? '✓ Downloaded' : 'Export CSV'}
+    </Button>
+  )
+}
+
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -285,6 +311,7 @@ export function OrderDetail() {
             <>
               <span className="text-sm text-gray-500 italic">Read-only</span>
               <Badge className="bg-green-100 text-green-800">Submitted</Badge>
+              <ExportCSVButton orderId={order.id} />
               <Button
                 variant="outline"
                 disabled={isPending}
