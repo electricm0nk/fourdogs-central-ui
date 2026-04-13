@@ -33,4 +33,15 @@ describe('LoginPage', () => {
     const link = screen.getByRole('link', { name: /sign in with google/i })
     expect(link.tagName).toBe('A')
   })
+
+  it('renders local dev session fallback controls', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByPlaceholderText(/paste session_id/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /use existing dev session/i })).toBeInTheDocument()
+  })
 })

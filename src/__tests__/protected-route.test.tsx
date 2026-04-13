@@ -87,4 +87,23 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Login Page')).toBeInTheDocument()
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
   })
+
+  it('redirects to /login on parse-like session errors', () => {
+    vi.mocked(useCurrentUser).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new SyntaxError('Unexpected token < in JSON at position 0'),
+    } as unknown as ReturnType<typeof useCurrentUser>)
+
+    render(
+      wrapper(
+        <ProtectedRoute>
+          <div>Protected Content</div>
+        </ProtectedRoute>
+      )
+    )
+
+    expect(screen.getByText('Login Page')).toBeInTheDocument()
+    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
+  })
 })
