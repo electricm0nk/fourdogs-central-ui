@@ -91,7 +91,7 @@ describe('Dashboard', () => {
     expect(screen.getByText(/data freshness loading/i)).toBeInTheDocument()
   })
 
-  it('shows "Start New Order" button', () => {
+  it('shows "+ New Order" button', () => {
     vi.mocked(useOrders).mockReturnValue({
       data: [],
       isLoading: false,
@@ -100,7 +100,7 @@ describe('Dashboard', () => {
 
     render(wrapper(<Dashboard />))
 
-    expect(screen.getByRole('button', { name: /start new order/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /\+ new order/i })).toBeInTheDocument()
   })
 
   it('opens create order modal when button is clicked', () => {
@@ -112,12 +112,12 @@ describe('Dashboard', () => {
 
     render(wrapper(<Dashboard />))
 
-    fireEvent.click(screen.getByRole('button', { name: /start new order/i }))
+    fireEvent.click(screen.getByRole('button', { name: /\+ new order/i }))
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
-  it('shows submitted badge for submitted orders', () => {
+  it('shows ordered badge for submitted orders', () => {
     const submittedOrder = { ...mockOrder, submitted: true }
     vi.mocked(useOrders).mockReturnValue({
       data: [submittedOrder],
@@ -127,7 +127,7 @@ describe('Dashboard', () => {
 
     render(wrapper(<Dashboard />))
 
-    expect(screen.getByText('Submitted')).toBeInTheDocument()
+    expect(screen.getByText('Ordered')).toBeInTheDocument()
   })
 
   it('shows In Progress badge for non-submitted orders', () => {
