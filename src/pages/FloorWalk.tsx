@@ -43,6 +43,14 @@ interface FloorWalkLinePayload {
   quantity: number
 }
 
+interface SuggestionRecord {
+  request_number: number
+  username: string
+  suggestion: string
+  status: string
+  submitted_at: string
+}
+
 function formatOrderDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -52,7 +60,7 @@ export function FloorWalk() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: order, isLoading } = useOrder(id ?? '')
-  const catalogQuery = useVendorCatalog(order?.vendor_adapter_id)
+  const catalogQuery = useVendorCatalog(order?.vendor_id, order?.vendor_adapter_id)
   const sourceSkus = catalogQuery.data ?? []
   const catalogSource = sourceSkus.length > 0 ? 'live' : 'none'
   const [lineItems, setLineItems] = useState<OrderLine[]>([])
@@ -72,11 +80,13 @@ export function FloorWalk() {
   const [scanMode, setScanMode] = useState<ScanMode>('add')
   const [scanInput, setScanInput] = useState('')
   const [scanMessage, setScanMessage] = useState('')
+  const [leftWingOpen, setLeftWingOpen] = useState(false)
+  const [rightWingOpen, setRightWingOpen] = useState(false)
+  const [suggestionText, setSuggestionText] = useState('')
   const [uiMode, setUiMode] = useState<UiMode>(() => readUiMode())
 
   const scanInputRef = useRef<HTMLInputElement | null>(null)
   const hydratedFromServerRef = useRef(false)
-  const saveTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     scanInputRef.current?.focus()
@@ -90,19 +100,7 @@ export function FloorWalk() {
 
   useEffect(() => {
     hydratedFromServerRef.current = false
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
   }, [id])
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current)
-      }
-    }
-  }, [])
 
   const floorWalkLinesQuery = useQuery({
     queryKey: ['order-floor-walk-lines', id],
@@ -114,6 +112,21 @@ export function FloorWalk() {
   const saveFloorWalkLines = useMutation({
     mutationFn: (lines: FloorWalkLinePayload[]) =>
       api.put<{ data: { saved: boolean } }>(`/v1/orders/${id}/floor-walk-lines`, { lines }),
+  })
+
+  const suggestionsQuery = useQuery({
+    queryKey: ['suggestions'],
+    queryFn: () => api.get<{ data: SuggestionRecord[] }>('/v1/suggestions'),
+    select: (res) => res.data,
+  })
+
+  const createSuggestion = useMutation({
+    mutationFn: (payload: { suggestion: string }) =>
+      api.post<{ data: SuggestionRecord }>('/v1/suggestions', payload),
+    onSuccess: () => {
+      setSuggestionText('')
+      suggestionsQuery.refetch()
+    },
   })
 
   const skuMap = useMemo(() => new Map(sourceSkus.map((sku) => [sku.id, sku])), [sourceSkus])
@@ -165,7 +178,8 @@ export function FloorWalk() {
         !lowerQuery ||
         sku.id.toLowerCase().includes(lowerQuery) ||
         sku.upc.includes(lowerQuery) ||
-        sku.name.toLowerCase().includes(lowerQuery)
+        sku.name.toLowerCase().includes(lowerQuery) ||
+        sku.manufacturer.toLowerCase().includes(lowerQuery)
       const qty = qtyBySku.get(sku.id) ?? 0
       const zeroMatch = hideZeroQty ? qty > 0 : true
       const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
@@ -201,6 +215,11 @@ export function FloorWalk() {
     [lineItems],
   )
 
+  const allBrands = useMemo(
+    () => Array.from(new Set(sourceSkus.map((sku) => sku.manufacturer?.trim()).filter((brand): brand is string => Boolean(brand)))).sort((a, b) => a.localeCompare(b)),
+    [sourceSkus],
+  )
+
   const budgetDisplay =
     typeof order?.budget_cents === 'number'
       ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(order.budget_cents / 100)
@@ -232,11 +251,6 @@ export function FloorWalk() {
 
   async function flushFloorWalkLines() {
     if (!id || !hydratedFromServerRef.current) return
-
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
 
     const payload: FloorWalkLinePayload[] = lineItems
       .filter((line) => line.quantity > 0)
@@ -285,6 +299,12 @@ export function FloorWalk() {
     setScanMessage(`${actionText} 1 for UPC ${sku.upc} (${nextQty})`)
     setScanInput('')
     scanInputRef.current?.focus()
+  }
+
+  async function handleSuggestionSubmit() {
+    const trimmed = suggestionText.trim()
+    if (!trimmed || trimmed.length > 4096) return
+    await createSuggestion.mutateAsync({ suggestion: trimmed })
   }
 
   if (!id) {
@@ -663,7 +683,7 @@ export function FloorWalk() {
               {saveFloorWalkLines.isPending
                 ? 'Saving floor walk lines…'
                 : saveFloorWalkLines.isError
-                  ? 'Save failed. Changes will retry automatically.'
+                  ? 'Save failed. Click Save Changes to retry.'
                   : 'Floor walk lines saved'}
             </p>
 
@@ -719,6 +739,100 @@ export function FloorWalk() {
           Scanner behavior: Add increments qty by 1 each scan. Remove decrements qty by 1 and never goes below zero.
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setLeftWingOpen((v) => !v)}
+        className={cn(
+          'fixed left-0 top-1/2 z-50 -translate-y-1/2 rounded-r-md border px-2 py-3 text-sm font-semibold shadow',
+          uiMode === 'dark' ? 'border-[#25324A] bg-[#13233C] text-slate-200' : 'border-amber-300 bg-white text-stone-700',
+        )}
+        aria-label="Toggle brand wing"
+      >
+        {leftWingOpen ? '<' : '>'}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setRightWingOpen((v) => !v)}
+        className={cn(
+          'fixed right-0 top-1/2 z-50 -translate-y-1/2 rounded-l-md border px-2 py-3 text-sm font-semibold shadow',
+          uiMode === 'dark' ? 'border-[#25324A] bg-[#13233C] text-slate-200' : 'border-amber-300 bg-white text-stone-700',
+        )}
+        aria-label="Toggle suggestion wing"
+      >
+        {rightWingOpen ? '>' : '<'}
+      </button>
+
+      <aside
+        className={cn(
+          'fixed left-0 top-0 z-40 h-screen w-72 transform border-r p-4 transition-transform duration-300 ease-out',
+          leftWingOpen ? 'translate-x-0' : '-translate-x-full',
+          uiMode === 'dark' ? 'border-[#25324A] bg-[#0B1424]' : 'border-amber-200 bg-amber-50',
+        )}
+      >
+        <h3 className="text-sm font-semibold">Brand Filters</h3>
+        <p className={cn('mt-1 text-xs', getMutedTextClass(uiMode))}>All brands currently available for filtering.</p>
+        <div className="mt-3 h-[calc(100vh-100px)] overflow-auto rounded border p-2">
+          {allBrands.map((brand) => (
+            <button
+              key={brand}
+              type="button"
+              onClick={() => {
+                setActiveTab('all')
+                setQuery(brand)
+              }}
+              className={cn('mb-1 block w-full rounded px-2 py-1 text-left text-xs', uiMode === 'dark' ? 'hover:bg-[#13233C]' : 'hover:bg-amber-100')}
+            >
+              {brand}
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <aside
+        className={cn(
+          'fixed right-0 top-0 z-40 h-screen w-96 transform border-l p-4 transition-transform duration-300 ease-out',
+          rightWingOpen ? 'translate-x-0' : 'translate-x-full',
+          uiMode === 'dark' ? 'border-[#25324A] bg-[#0B1424]' : 'border-amber-200 bg-amber-50',
+        )}
+      >
+        <h3 className="text-sm font-semibold">Suggestion Box</h3>
+        <p className={cn('mt-1 text-xs', getMutedTextClass(uiMode))}>Submit free-form suggestions (max 4096 chars).</p>
+        <textarea
+          value={suggestionText}
+          onChange={(event) => setSuggestionText(event.target.value.slice(0, 4096))}
+          maxLength={4096}
+          className={cn('mt-3 h-28 w-full rounded border p-2 text-xs', getInputClass(uiMode))}
+          placeholder="Type your suggestion here..."
+        />
+        <div className={cn('mt-1 text-right text-[11px]', getMutedTextClass(uiMode))}>{suggestionText.length}/4096</div>
+        <Button
+          type="button"
+          className="mt-2 w-full"
+          onClick={handleSuggestionSubmit}
+          disabled={createSuggestion.isPending || suggestionText.trim().length === 0 || suggestionText.length > 4096}
+        >
+          {createSuggestion.isPending ? 'Submitting…' : 'Submit'}
+        </Button>
+
+        <div className="mt-4 h-[calc(100vh-280px)] overflow-auto rounded border p-2">
+          {suggestionsQuery.isLoading ? (
+            <p className={cn('text-xs', getMutedTextClass(uiMode))}>Loading suggestions...</p>
+          ) : (
+            (suggestionsQuery.data ?? []).map((row) => (
+              <div key={row.request_number} className={cn('mb-2 rounded border p-2 text-xs', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">#{row.request_number}</span>
+                  <span className={cn('rounded px-1.5 py-0.5 text-[10px]', uiMode === 'dark' ? 'bg-[#13233C]' : 'bg-amber-100')}>{row.status}</span>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap">{row.suggestion}</p>
+                <p className={cn('mt-1 text-[10px]', getMutedTextClass(uiMode))}>{row.username} • {new Date(row.submitted_at).toLocaleString()}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
     </div>
   )
 }

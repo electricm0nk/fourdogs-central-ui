@@ -14,7 +14,7 @@ import { Select, SelectItem } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { DataFreshnessPanel } from '@/components/DataFreshnessPanel'
 import { useOrders } from '@/hooks/use_orders'
-import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
+import { useVendors } from '@/hooks/use_vendors'
 import { useArchiveOrder, useSubmitOrder } from '@/hooks/use_order_mutations'
 import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
 import { api } from '@/lib/api'
@@ -302,7 +302,7 @@ function OrderRow({
 function CreateOrderModal({ open, onClose, uiMode }: { open: boolean; onClose: () => void; uiMode: UiMode }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: adapters = [] } = useVendorAdapters()
+  const { data: vendors = [] } = useVendors()
   const [vendorId, setVendorId] = useState('')
   const [orderDate, setOrderDate] = useState('')
   const [budgetDollars, setBudgetDollars] = useState('')
@@ -328,7 +328,7 @@ function CreateOrderModal({ open, onClose, uiMode }: { open: boolean; onClose: (
         budgetCents = Math.round(parsed * 100)
       }
       const result = await api.post<{ data: Order }>('/v1/orders', {
-        vendor_adapter_id: vendorId,
+        vendor_id: parseInt(vendorId, 10),
         order_date: orderDate,
         ...(budgetCents !== undefined ? { budget_cents: budgetCents } : {}),
       })
@@ -365,8 +365,8 @@ function CreateOrderModal({ open, onClose, uiMode }: { open: boolean; onClose: (
               className={uiMode === 'dark' ? 'border-[#3C5678] bg-[#0F1E33] text-slate-100 focus:ring-sky-500' : ''}
             >
               <SelectItem value="">Select a vendor…</SelectItem>
-              {adapters.map((a) => (
-                <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+              {vendors.map((v) => (
+                <SelectItem key={v.id} value={String(v.id)}>{v.name} ({v.sku_count} SKUs)</SelectItem>
               ))}
             </Select>
           </div>
@@ -455,7 +455,7 @@ export function Dashboard() {
   const activeOrders = allOrders.filter((o) => !o.submitted)
   const placedOrders = allOrders.filter((o) => o.submitted)
 
-  const catalogQuery = useVendorCatalog(allOrders[0]?.vendor_adapter_id)
+  const catalogQuery = useVendorCatalog(allOrders[0]?.vendor_id, allOrders[0]?.vendor_adapter_id)
 
   function saveUiMode(mode: UiMode) {
     setUiMode(mode)
