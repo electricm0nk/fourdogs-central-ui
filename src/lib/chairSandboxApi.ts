@@ -114,6 +114,7 @@ function normalizeSku(row: Record<string, unknown>, index: number): ChairSku {
     typeof manufacturerCandidate === 'string' && manufacturerCandidate.trim()
       ? manufacturerCandidate.trim()
       : 'Unknown Manufacturer'
+  const category = String(categoryCandidate || typeCandidate || '').trim()
 
   let priceCents = 0
   if (typeof priceCandidate === 'number') {
@@ -125,6 +126,7 @@ function normalizeSku(row: Record<string, unknown>, index: number): ChairSku {
     upc,
     name,
     tab: inferTab(`${String(categoryCandidate)} ${String(typeCandidate)}`),
+    category,
     manufacturer,
     animal: inferAnimal(String(speciesCandidate)),
     pack: String(packCandidate),
