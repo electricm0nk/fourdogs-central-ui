@@ -3,8 +3,8 @@ import type { ChairSku } from '@/lib/chairSandboxMock'
 export type UiMode = 'light' | 'dark'
 
 export function readUiMode(): UiMode {
-  if (typeof window === 'undefined') return 'light'
-  return window.localStorage.getItem('fd-ui-mode') === 'dark' ? 'dark' : 'light'
+  if (typeof window === 'undefined') return 'dark'
+  return window.localStorage.getItem('fd-ui-mode') === 'light' ? 'light' : 'dark'
 }
 
 function normalizeNameBase(name: string): string {
