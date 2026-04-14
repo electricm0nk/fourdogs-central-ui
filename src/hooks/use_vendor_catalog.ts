@@ -3,7 +3,8 @@ import { api } from '@/lib/api'
 import type { ChairSku } from '@/lib/chairSandboxMock'
 
 // Backend items use single-letter field names (see internal/db/models.go Item struct).
-// Fields: i=id, u=upc, n=name, b=brand/manufacturer, q=qoh, p=price, sp=species, t=tab/type
+// Fields used here: i=id, u=upc, n=name, b=brand/manufacturer, q=qoh,
+// c=order multiples, k=vendor cost, sp=species, t=tab/type
 type RawItem = Record<string, unknown>
 
 function inferTab(raw: string): ChairSku['tab'] {
@@ -39,9 +40,11 @@ function normalizeItem(row: RawItem, idx: number): ChairSku {
   const name = typeof row.n === 'string' && row.n.trim() ? row.n.trim() : `Item ${idx + 1}`
   const manufacturer = typeof row.b === 'string' && row.b.trim() ? row.b.trim() : 'Unknown'
 
-  // Price: p field — treat as dollars if ≤ 100, as cents if > 100
-  const rawPrice = typeof row.p === 'number' ? row.p : 0
+  // Vendor cost: k field — treat as dollars if ≤ 100, as cents if > 100
+  const rawPrice = typeof row.k === 'number' ? row.k : 0
   const priceCents = rawPrice > 100 ? Math.round(rawPrice) : Math.round(rawPrice * 100)
+
+  const rawMultiples = typeof row.c === 'number' ? Math.max(1, Math.round(row.c)) : 1
 
   // QOH: q field
   const qoh = typeof row.q === 'number' ? Math.max(0, Math.round(row.q)) : 0
@@ -50,28 +53,38 @@ function normalizeItem(row: RawItem, idx: number): ChairSku {
   const sp = String(row.sp ?? '')
   const animal = inferAnimal(sp)
 
-  // Tab from t field
-  const tab = inferTab(String(row.t ?? ''))
+  // Category + tab from t field
+  const category = typeof row.t === 'string' ? row.t.trim() : String(row.t ?? '')
+  const tab = inferTab(category)
+
+  const reorderStatus =
+    typeof row.r === 'string' ? row.r.trim() :
+    typeof row.reorder_status === 'string' ? row.reorder_status.trim() :
+    ''
+
+  const doNotReorder = /do\s*not\s*reorder|do_not_reorder/i.test(reorderStatus)
 
   return {
     id,
     upc,
     name,
     tab,
+    category,
     manufacturer,
     animal,
-    pack: '1 ct', // not stored in items table; vendor_product_mapping has order_in_multiples
+    pack: String(rawMultiples),
     priceCents: Math.max(priceCents, 0),
     velocity: 'medium', // TODO: derive from sales velocity data once available
     qoh,
+    reorderStatus,
+    doNotReorder,
   }
 }
 
 /**
  * Fetches the vendor catalog from GET /v1/items.
- * The backend returns items scoped to active brands (currently SE Pet).
- * Pass vendorAdapterId so the query is cache-keyed per vendor; backend will
- * support ?vendor_adapter_id= filtering once multiple distributors are imported.
+ * When vendorAdapterId is present the backend returns only items carried by that
+ * distributor, with vendor-specific cost and order multiples from product-vendors.
  */
 export function useVendorCatalog(vendorAdapterId?: string) {
   return useQuery({
