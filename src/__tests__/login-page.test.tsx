@@ -34,14 +34,14 @@ describe('LoginPage', () => {
     expect(link.tagName).toBe('A')
   })
 
-  it('renders local dev session fallback controls', () => {
+  it('does not render local dev session fallback controls', () => {
     render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>
     )
 
-    expect(screen.getByPlaceholderText(/paste session_id/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /use existing dev session/i })).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/paste session_id/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /use existing dev session/i })).not.toBeInTheDocument()
   })
 })

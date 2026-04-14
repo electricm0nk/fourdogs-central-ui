@@ -1,20 +1,6 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export function LoginPage() {
-  const navigate = useNavigate()
-  const [devSessionId, setDevSessionId] = useState('')
-
-  function useExistingSession() {
-    const clean = devSessionId.trim()
-    if (!clean) return
-    window.localStorage.setItem('dev_session_id', clean)
-    navigate('/')
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-sm">
@@ -31,22 +17,6 @@ export function LoginPage() {
             <GoogleIcon />
             Sign in with Google
           </a>
-
-          <div className="w-full border-t border-gray-200 pt-4">
-            <p className="text-xs font-medium text-gray-700">Local dev fallback</p>
-            <p className="mt-1 text-xs text-gray-500">
-              If OAuth on localhost is blocked, paste a valid dev `session_id` cookie value.
-            </p>
-            <Input
-              value={devSessionId}
-              onChange={(event) => setDevSessionId(event.target.value)}
-              placeholder="paste session_id"
-              className="mt-2"
-            />
-            <Button className="mt-2 w-full" variant="outline" onClick={useExistingSession} disabled={!devSessionId.trim()}>
-              Use Existing Dev Session
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
