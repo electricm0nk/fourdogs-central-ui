@@ -65,7 +65,7 @@ describe('DataFreshnessPanel', () => {
 
     render(wrapper(<DataFreshnessPanel />))
 
-    expect(screen.getByText(/data freshness loading/i)).toBeInTheDocument()
+    expect(screen.getByText(/\.\.\. loading/i)).toBeInTheDocument()
   })
 
   it('shows inventory freshness with checkmark when fresh', () => {

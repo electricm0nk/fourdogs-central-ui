@@ -2,7 +2,9 @@ import { createBrowserRouter, RouterProvider, Outlet } from 'react-router'
 import { LoginPage } from '@/pages/LoginPage'
 import { Dashboard } from '@/pages/Dashboard'
 import { OrderDetail } from '@/pages/OrderDetail'
+import { FloorWalk } from '@/pages/FloorWalk'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { ChairSandbox } from '@/pages/ChairSandbox'
 
 // Root layout — wraps all routes
 function RootLayout() {
@@ -34,6 +36,15 @@ const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+      {
+        path: 'orders/:id/floor-walk',
+        element: (
+          <ProtectedRoute>
+            <FloorWalk />
+          </ProtectedRoute>
+        ),
+      },
+      { path: 'sandbox/chair', element: <ChairSandbox /> },
       { path: 'login', element: <LoginPage /> },
       { path: '*', element: <NotFound /> },
     ],

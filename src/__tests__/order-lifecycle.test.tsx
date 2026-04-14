@@ -95,7 +95,7 @@ describe('Dashboard — archive lifecycle', () => {
     } as unknown as ReturnType<typeof useSubmitOrder>)
   })
 
-  it('shows archive button on active order card', () => {
+  it('does not show archive button on active order row', () => {
     vi.mocked(useOrders).mockReturnValue({
       data: [activeOrder],
       isLoading: false,
@@ -104,10 +104,10 @@ describe('Dashboard — archive lifecycle', () => {
 
     render(wrapper(<Dashboard />))
 
-    expect(screen.getByRole('button', { name: /^archive order$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^archive$/i })).not.toBeInTheDocument()
   })
 
-  it('calls archive mutation when archive button clicked', () => {
+  it('shows active-order actions (floor walk, worksheet, mark ordered)', () => {
     vi.mocked(useOrders).mockReturnValue({
       data: [activeOrder],
       isLoading: false,
@@ -115,9 +115,10 @@ describe('Dashboard — archive lifecycle', () => {
     } as unknown as ReturnType<typeof useOrders>)
 
     render(wrapper(<Dashboard />))
-    fireEvent.click(screen.getByRole('button', { name: /^archive order$/i }))
 
-    expect(mockArchiveMutate).toHaveBeenCalledWith({ id: activeOrder.id })
+    expect(screen.getByRole('button', { name: /^floor walk$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^worksheet$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^mark ordered$/i })).toBeInTheDocument()
   })
 
   it('shows Show Archived toggle button', () => {
@@ -148,7 +149,7 @@ describe('Dashboard — archive lifecycle', () => {
     render(wrapper(<Dashboard />))
     fireEvent.click(screen.getByRole('button', { name: /show archived/i }))
 
-    expect(screen.getByRole('heading', { name: /archived orders/i })).toBeInTheDocument()
+    expect(screen.getByText(/^Archived Orders$/i)).toBeInTheDocument()
   })
 })
 
@@ -167,7 +168,7 @@ describe('OrderDetail — submit lifecycle', () => {
     } as unknown as ReturnType<typeof useArchiveOrder>)
   })
 
-  it('shows Mark Submitted button for unsubmitted order', () => {
+  it('shows Return to Orders button for unsubmitted order', () => {
     vi.mocked(useOrder).mockReturnValue({
       data: activeOrder,
       isLoading: false,
@@ -176,10 +177,10 @@ describe('OrderDetail — submit lifecycle', () => {
 
     render(orderDetailWrapper(activeOrder.id))
 
-    expect(screen.getByRole('button', { name: /mark submitted/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /return to orders/i })).toBeInTheDocument()
   })
 
-  it('fires PATCH submitted=true when Mark Submitted clicked', () => {
+  it('fires PATCH submitted=true when Return to Orders clicked', () => {
     vi.mocked(useOrder).mockReturnValue({
       data: activeOrder,
       isLoading: false,
@@ -187,9 +188,12 @@ describe('OrderDetail — submit lifecycle', () => {
     } as unknown as ReturnType<typeof useOrder>)
 
     render(orderDetailWrapper(activeOrder.id))
-    fireEvent.click(screen.getByRole('button', { name: /mark submitted/i }))
+    fireEvent.click(screen.getByRole('button', { name: /return to orders/i }))
 
-    expect(mockSubmitMutate).toHaveBeenCalledWith({ id: activeOrder.id, submitted: true })
+    expect(mockSubmitMutate).toHaveBeenCalledWith(
+      { id: activeOrder.id, submitted: true },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
   })
 
   it('shows Unsubmit button for submitted order', () => {
@@ -238,6 +242,6 @@ describe('OrderDetail — submit lifecycle', () => {
 
     render(orderDetailWrapper(activeOrder.id))
 
-    expect(screen.queryByRole('button', { name: /mark submitted/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /return to orders/i })).not.toBeInTheDocument()
   })
 })

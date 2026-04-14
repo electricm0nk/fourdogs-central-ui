@@ -9,10 +9,13 @@ export class ApiError extends Error {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const devSessionId = typeof window !== 'undefined' ? window.localStorage.getItem('dev_session_id')?.trim() : ''
+
   const res = await fetch(path, {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(devSessionId ? { 'x-dev-session-id': devSessionId } : {}),
       ...init?.headers,
     },
     ...init,
@@ -28,6 +31,8 @@ export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
   post: <T>(path: string, body: unknown) =>
     apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  put: <T>(path: string, body: unknown) =>
+    apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) =>
     apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   postForm: <T>(path: string, body: FormData) =>
