@@ -83,14 +83,16 @@ function normalizeItem(row: RawItem, idx: number): ChairSku {
 
 /**
  * Fetches the vendor catalog from GET /v1/items.
- * When vendorAdapterId is present the backend returns only items carried by that
- * distributor, with vendor-specific cost and order multiples from product-vendors.
+ * Supports filtering by vendor_id or vendor_adapter_id query parameters.
+ * When vendorId is present, it takes precedence over vendorAdapterId.
  */
-export function useVendorCatalog(vendorAdapterId?: string) {
+export function useVendorCatalog(vendorId?: number | null, vendorAdapterId?: string) {
   return useQuery({
-    queryKey: ['vendor-catalog', vendorAdapterId ?? 'default'],
+    queryKey: ['vendor-catalog', vendorId ?? vendorAdapterId ?? 'default'],
     queryFn: () => {
-      const url = vendorAdapterId
+      const url =  vendorId
+        ? `/v1/items?vendor_id=${encodeURIComponent(vendorId.toString())}`
+        : vendorAdapterId
         ? `/v1/items?vendor_adapter_id=${encodeURIComponent(vendorAdapterId)}`
         : '/v1/items'
       return api.get<unknown>(url)

@@ -1,6 +1,7 @@
 export interface Order {
   id: string
   vendor_adapter_id: string
+  vendor_id?: number
   vendor_name?: string
   created_by: string
   order_date: string
