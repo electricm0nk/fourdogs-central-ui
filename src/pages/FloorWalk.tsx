@@ -58,6 +58,7 @@ export function FloorWalk() {
   const [lineItems, setLineItems] = useState<OrderLine[]>([])
   const [activeTab, setActiveTab] = useState<CatalogTab>('all')
   const [animal, setAnimal] = useState<AnimalFilter>('all')
+  const [hideTabs, setHideTabs] = useState(false)
   const [hideZeroQty, setHideZeroQty] = useState(false)
   const [onlyZeroQoh, setOnlyZeroQoh] = useState(false)
   const [only111, setOnly111] = useState(false)
@@ -344,8 +345,8 @@ export function FloorWalk() {
   }
 
   return (
-    <div className={cn('min-h-screen p-6', getPageClass(uiMode))}>
-      <div className="max-w-[1400px] mx-auto space-y-4">
+    <div className={cn('h-screen overflow-hidden p-6', getPageClass(uiMode))}>
+      <div className="mx-auto flex h-full max-w-[1400px] flex-col gap-4">
         <div className={cn('rounded-lg border p-5', getCardClass(uiMode))}>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold">Floor Walk</h1>
@@ -382,8 +383,8 @@ export function FloorWalk() {
             )}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-          <section className={cn('rounded-lg border p-5', getSectionClass(uiMode))}>
+        <div className="grid flex-1 min-h-0 gap-4 xl:grid-cols-[1fr_360px]">
+          <section className={cn('flex min-h-0 flex-col rounded-lg border p-5', getSectionClass(uiMode))}>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Input
                 value={query}
@@ -406,6 +407,14 @@ export function FloorWalk() {
                   </button>
                 ))}
               </div>
+              <label className={cn('flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
+                <input
+                  type="checkbox"
+                  checked={hideTabs}
+                  onChange={(event) => setHideTabs(event.target.checked)}
+                />
+                Hide tabs
+              </label>
               <label className={cn('ml-auto flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
                 <input
                   type="checkbox"
@@ -440,6 +449,8 @@ export function FloorWalk() {
               </label>
             </div>
 
+            {!hideTabs && (
+            <>
             <div className={cn('mb-3 flex flex-wrap gap-2 border-b pb-3', uiMode === 'dark' ? 'border-[#23314A]' : 'border-amber-200')}>
               {tabOptions.map((tab) => (
                 <button
@@ -538,6 +549,9 @@ export function FloorWalk() {
               </div>
             )}
 
+            </>
+            )}
+
             {!catalogQuery.isLoading && sourceSkus.length === 0 && (
               <div className={cn('mb-3 rounded border px-3 py-2 text-sm', uiMode === 'dark' ? 'border-red-800 bg-red-950/30 text-red-200' : 'border-red-200 bg-red-50 text-red-700')}>
                 Floor Walk requires live catalog data from central. No mock fallback is used here.
@@ -562,7 +576,7 @@ export function FloorWalk() {
               </span>
             </div>
 
-            <div className={cn('max-h-[64vh] overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
+            <div className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
               <table className="w-full min-w-[980px] border-collapse text-xs">
                 <thead className={cn('sticky top-0 z-10', getTableHeaderClass(uiMode))}>
                   <tr>
@@ -629,7 +643,7 @@ export function FloorWalk() {
             </div>
           </section>
 
-          <aside className={cn('rounded-lg border p-5', getSectionClass(uiMode))}>
+          <aside className={cn('min-h-0 overflow-auto rounded-lg border p-5', getSectionClass(uiMode))}>
             <h2 className="text-base font-semibold">Scanner Entry</h2>
             <p className={cn('mt-1 text-xs', getMutedTextClass(uiMode))}>
               Keep cursor in the input box and scan 12-digit UPCs. Qty updates automatically.

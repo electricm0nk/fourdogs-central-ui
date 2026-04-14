@@ -72,6 +72,7 @@ export function OrderDetail() {
   // Worksheet filter state
   const [activeTab, setActiveTab] = useState<CatalogTabKey>('all')
   const [animal, setAnimal] = useState<AnimalFilter>('all')
+  const [hideTabs, setHideTabs] = useState(false)
   const [hideZeroQty, setHideZeroQty] = useState(false)
   const [onlyZeroQoh, setOnlyZeroQoh] = useState(false)
   const [only111, setOnly111] = useState(false)
@@ -427,7 +428,7 @@ export function OrderDetail() {
   }
 
   return (
-    <div className={cn('min-h-screen', getPageClass(uiMode))}>
+    <div className={cn('flex h-screen flex-col overflow-hidden', getPageClass(uiMode))}>
       <header className={cn('sticky top-0 z-20 border-b px-6 py-3 backdrop-blur', uiMode === 'dark' ? 'border-[#23314A] bg-[#101B31]/95' : 'border-amber-200 bg-amber-50/95')}>
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-3">
         <Button
@@ -480,8 +481,8 @@ export function OrderDetail() {
         <div className="mx-auto mt-2 max-w-[1400px] h-1.5 rounded-full bg-gradient-to-r from-[#762123] via-[#006A71] to-[#CE7019]" />
       </header>
 
-      <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 xl:grid-cols-[1fr_360px]">
-        <section className={cn('rounded-lg border p-4 shadow-sm', getSectionClass(uiMode))}>
+      <main className="mx-auto grid h-full min-h-0 max-w-[1400px] flex-1 grid-cols-1 gap-4 p-4 xl:grid-cols-[1fr_360px] overflow-hidden">
+        <section className={cn('flex min-h-0 flex-col rounded-lg border p-4 shadow-sm', getSectionClass(uiMode))}>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-base font-semibold">Order Worksheet</h2>
             <span className={cn('text-xs', getMutedTextClass(uiMode))}>Floor walk layout applied</span>
@@ -507,6 +508,10 @@ export function OrderDetail() {
                 </button>
               ))}
             </div>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={hideTabs} onChange={(e) => setHideTabs(e.target.checked)} />
+              Hide tabs
+            </label>
             <label className={cn('ml-auto flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
               <input type="checkbox" checked={hideZeroQty} onChange={(e) => setHideZeroQty(e.target.checked)} />
               Hide zero qty
@@ -525,103 +530,106 @@ export function OrderDetail() {
             </label>
           </div>
 
-          {/* Tab pills */}
-          <div className={cn('mb-2 flex flex-wrap gap-1.5 border-b pb-2', uiMode === 'dark' ? 'border-[#23314A]' : 'border-amber-200')}>
-            {tabOptions.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                className={cn(
-                  'rounded-full border px-3 py-0.5 text-xs uppercase tracking-wide',
-                  activeTab === tab.key
-                    ? (uiMode === 'dark' ? 'border-sky-500 bg-sky-500/20 text-sky-300' : 'border-teal-700 bg-teal-700 text-white')
-                    : (uiMode === 'dark' ? 'border-[#25324A] bg-transparent text-slate-400' : 'border-amber-300 bg-amber-50 text-stone-700'),
-                )}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {activeTab === 'food' && (
-            <div className="mb-2 flex items-center gap-2 text-xs">
-              <span className={cn(getMutedTextClass(uiMode))}>Food brand</span>
-              <select
-                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
-                value={foodBrand}
-                onChange={(event) => setFoodBrand(event.target.value)}
-              >
-                <option value="all">All Brands</option>
-                {foodBrandOptions.map((brand) => (
-                  <option key={brand} value={brand}>{brand}</option>
+          {!hideTabs && (
+            <>
+              <div className={cn('mb-2 flex flex-wrap gap-1.5 border-b pb-2', uiMode === 'dark' ? 'border-[#23314A]' : 'border-amber-200')}>
+                {tabOptions.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={cn(
+                      'rounded-full border px-3 py-0.5 text-xs uppercase tracking-wide',
+                      activeTab === tab.key
+                        ? (uiMode === 'dark' ? 'border-sky-500 bg-sky-500/20 text-sky-300' : 'border-teal-700 bg-teal-700 text-white')
+                        : (uiMode === 'dark' ? 'border-[#25324A] bg-transparent text-slate-400' : 'border-amber-300 bg-amber-50 text-stone-700'),
+                    )}
+                    onClick={() => setActiveTab(tab.key)}
+                  >
+                    {tab.label}
+                  </button>
                 ))}
-              </select>
-            </div>
-          )}
+              </div>
 
-          {activeTab === 'frozen' && (
-            <div className="mb-2 flex items-center gap-2 text-xs">
-              <span className={cn(getMutedTextClass(uiMode))}>Frozen brand</span>
-              <select
-                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
-                value={frozenBrand}
-                onChange={(event) => setFrozenBrand(event.target.value)}
-              >
-                <option value="all">All Brands</option>
-                {frozenBrandOptions.map((brand) => (
-                  <option key={brand} value={brand}>{brand}</option>
-                ))}
-              </select>
-            </div>
-          )}
+              {activeTab === 'food' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Food brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={foodBrand}
+                    onChange={(event) => setFoodBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {foodBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-          {activeTab === 'treats' && (
-            <div className="mb-2 flex items-center gap-2 text-xs">
-              <span className={cn(getMutedTextClass(uiMode))}>Treat brand</span>
-              <select
-                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
-                value={treatsBrand}
-                onChange={(event) => setTreatsBrand(event.target.value)}
-              >
-                <option value="all">All Brands</option>
-                {treatsBrandOptions.map((brand) => (
-                  <option key={brand} value={brand}>{brand}</option>
-                ))}
-              </select>
-            </div>
-          )}
+              {activeTab === 'frozen' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Frozen brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={frozenBrand}
+                    onChange={(event) => setFrozenBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {frozenBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-          {activeTab === 'toys' && (
-            <div className="mb-2 flex items-center gap-2 text-xs">
-              <span className={cn(getMutedTextClass(uiMode))}>Toy brand</span>
-              <select
-                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
-                value={toysBrand}
-                onChange={(event) => setToysBrand(event.target.value)}
-              >
-                <option value="all">All Brands</option>
-                {toysBrandOptions.map((brand) => (
-                  <option key={brand} value={brand}>{brand}</option>
-                ))}
-              </select>
-            </div>
-          )}
+              {activeTab === 'treats' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Treat brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={treatsBrand}
+                    onChange={(event) => setTreatsBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {treatsBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-          {activeTab === 'everything-else' && (
-            <div className="mb-2 flex items-center gap-2 text-xs">
-              <span className={cn(getMutedTextClass(uiMode))}>Everything Else brand</span>
-              <select
-                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
-                value={everythingElseBrand}
-                onChange={(event) => setEverythingElseBrand(event.target.value)}
-              >
-                <option value="all">All Brands</option>
-                {everythingElseBrandOptions.map((brand) => (
-                  <option key={brand} value={brand}>{brand}</option>
-                ))}
-              </select>
-            </div>
+              {activeTab === 'toys' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Toy brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={toysBrand}
+                    onChange={(event) => setToysBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {toysBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {activeTab === 'everything-else' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Everything Else brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={everythingElseBrand}
+                    onChange={(event) => setEverythingElseBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {everythingElseBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
           )}
 
           <div className={cn('mb-1 flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
@@ -659,7 +667,7 @@ export function OrderDetail() {
             </span>
           </div>
 
-          <div className={cn('max-h-[64vh] overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
+          <div className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
             <table className="w-full min-w-[980px] border-collapse text-xs">
               <thead className={cn('sticky top-0 z-10', getTableHeaderClass(uiMode))}>
                 <tr>
@@ -743,7 +751,7 @@ export function OrderDetail() {
           </p>
         </section>
 
-        <aside className={cn('rounded-lg border p-4 shadow-sm', getSectionClass(uiMode))}>
+        <aside className={cn('flex h-full min-h-0 flex-col rounded-lg border p-4 shadow-sm', getSectionClass(uiMode))}>
           {/* ── Kaylee Recommends ── */}
           <div className={cn('mb-4 rounded-lg border p-3', uiMode === 'dark' ? 'border-[#23314A] bg-[#0A182A]' : 'border-amber-200 bg-amber-50')}>
             <h3 className="mb-2 text-sm font-semibold">Kaylee Recommends</h3>
@@ -795,7 +803,7 @@ export function OrderDetail() {
 
           {kayleeError && <p className="mt-2 rounded bg-rose-50 p-2 text-xs text-rose-700">{kayleeError}</p>}
 
-          <div className={cn('mt-3 h-[240px] min-h-[180px] max-h-[560px] resize-y overflow-y-auto rounded border p-2', getChatBgClass(uiMode))}>
+          <div className={cn('mt-3 min-h-0 flex-1 overflow-y-auto rounded border p-2', getChatBgClass(uiMode))}>
             {messages.map((message) => (
               <div
                 key={message.id}
