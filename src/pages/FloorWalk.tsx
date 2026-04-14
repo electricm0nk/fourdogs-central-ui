@@ -131,34 +131,6 @@ export function FloorWalk() {
     hydratedFromServerRef.current = true
   }, [floorWalkLinesQuery.data, floorWalkLinesQuery.isSuccess])
 
-  useEffect(() => {
-    if (!id || !hydratedFromServerRef.current) return
-
-    const payload: FloorWalkLinePayload[] = lineItems
-      .filter((line) => line.quantity > 0)
-      .map((line) => {
-        const sku = skuMap.get(line.skuId)
-        if (!sku) return null
-
-        return {
-          sku_id: line.skuId,
-          item_upc: sku.upc,
-          quantity: line.quantity,
-        }
-      })
-      .filter((line): line is FloorWalkLinePayload => line !== null)
-
-    saveTimerRef.current = window.setTimeout(() => {
-      saveFloorWalkLines.mutate(payload)
-    }, 400)
-
-    return () => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current)
-        saveTimerRef.current = null
-      }
-    }
-  }, [lineItems, id, skuMap, saveFloorWalkLines])
 
   const tabOptions = useMemo(() => buildCatalogTabs(sourceSkus), [sourceSkus])
   const frozenBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'frozen'), [sourceSkus])
@@ -695,6 +667,15 @@ export function FloorWalk() {
                   : 'Floor walk lines saved'}
             </p>
 
+              <div className="mt-4 flex gap-2">
+                <Button
+                  className="flex-1"
+                  onClick={flushFloorWalkLines}
+                  disabled={saveFloorWalkLines.isPending}
+                >
+                  {saveFloorWalkLines.isPending ? 'Saving…' : 'Save Changes'}
+                </Button>
+              </div>
             <div className={cn('mt-3 rounded-md p-3 text-sm', uiMode === 'dark' ? 'border border-[#23314A] bg-[#0F1F36]' : 'border border-amber-200 bg-amber-50')}>
               <p><span className={getMutedTextClass(uiMode)}>Order budget:</span> <span className="font-medium">{budgetDisplay}</span></p>
               <p className="mt-1"><span className={getMutedTextClass(uiMode)}>Running total:</span> <span className="font-medium">{formatMoney(runningTotalCents)}</span></p>
