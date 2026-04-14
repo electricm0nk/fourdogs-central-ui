@@ -88,7 +88,7 @@ describe('Dashboard', () => {
 
     render(wrapper(<Dashboard />))
 
-    expect(screen.getByText(/data freshness loading/i)).toBeInTheDocument()
+    expect(screen.getByText(/\.\.\. loading/i)).toBeInTheDocument()
   })
 
   it('shows "+ New Order" button', () => {
