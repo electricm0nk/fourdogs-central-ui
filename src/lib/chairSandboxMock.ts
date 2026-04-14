@@ -13,12 +13,15 @@ export interface ChairSku {
   upc: string
   name: string
   tab: Exclude<ProductTab, 'all'>
+  category: string
   manufacturer: string
   animal: 'dog' | 'cat'
   pack: string
   priceCents: number
   velocity: 'fast' | 'medium' | 'slow'
   qoh: number
+  reorderStatus?: string
+  doNotReorder?: boolean
 }
 
 export interface SeededOrderLine {
@@ -76,12 +79,15 @@ export function makeChairSkus(total = 5_000): ChairSku[] {
       upc: `00${String(index).padStart(10, '0')}`,
       name: `${manufacturer} ${tab.toUpperCase()} ${animal.toUpperCase()} Formula ${String(index).padStart(4, '0')}`,
       tab,
+      category: tab,
       manufacturer,
       animal,
       pack,
       priceCents,
       velocity,
       qoh: (h >>> 5) % 25,
+      reorderStatus: 'SMART_ORDER',
+      doNotReorder: false,
     }
   })
 }
