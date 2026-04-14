@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import type { AnimalFilter, ChairSku } from '@/lib/chairSandboxMock'
 import { api } from '@/lib/api'
 import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
+import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
 import {
   compareSkuByNameAndSize,
   getActiveToggleBtnClass,
@@ -28,7 +29,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useOrder } from '@/hooks/use_order'
 
-type CatalogTab = 'all' | 'treats' | 'frozen' | 'wellness' | string
+type CatalogTab = CatalogTabKey
 type ScanMode = 'add' | 'remove'
 
 interface OrderLine {
@@ -58,6 +59,14 @@ export function FloorWalk() {
   const [activeTab, setActiveTab] = useState<CatalogTab>('all')
   const [animal, setAnimal] = useState<AnimalFilter>('all')
   const [hideZeroQty, setHideZeroQty] = useState(false)
+  const [onlyZeroQoh, setOnlyZeroQoh] = useState(false)
+  const [only111, setOnly111] = useState(false)
+  const [hideDoNotReorder, setHideDoNotReorder] = useState(true)
+  const [frozenBrand, setFrozenBrand] = useState('all')
+  const [foodBrand, setFoodBrand] = useState('all')
+  const [treatsBrand, setTreatsBrand] = useState('all')
+  const [toysBrand, setToysBrand] = useState('all')
+  const [everythingElseBrand, setEverythingElseBrand] = useState('all')
   const [query, setQuery] = useState('')
   const [scanMode, setScanMode] = useState<ScanMode>('add')
   const [scanInput, setScanInput] = useState('')
@@ -66,6 +75,7 @@ export function FloorWalk() {
 
   const scanInputRef = useRef<HTMLInputElement | null>(null)
   const hydratedFromServerRef = useRef(false)
+  const saveTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     scanInputRef.current?.focus()
@@ -79,7 +89,19 @@ export function FloorWalk() {
 
   useEffect(() => {
     hydratedFromServerRef.current = false
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
   }, [id])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current)
+      }
+    }
+  }, [])
 
   const floorWalkLinesQuery = useQuery({
     queryKey: ['order-floor-walk-lines', id],
@@ -125,39 +147,45 @@ export function FloorWalk() {
       })
       .filter((line): line is FloorWalkLinePayload => line !== null)
 
-    const t = window.setTimeout(() => {
+    saveTimerRef.current = window.setTimeout(() => {
       saveFloorWalkLines.mutate(payload)
     }, 400)
 
-    return () => window.clearTimeout(t)
+    return () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+    }
   }, [lineItems, id, skuMap, saveFloorWalkLines])
 
-  const tabOptions = useMemo(() => {
-    const manufacturerTabs = Array.from(
-      new Set(
-        sourceSkus
-          .filter((sku) => sku.tab !== 'frozen' && sku.tab !== 'wellness' && sku.tab !== 'treats')
-          .map((sku) => sku.manufacturer || 'Unknown Manufacturer'),
-      ),
-    ).sort((a, b) => a.localeCompare(b))
+  const tabOptions = useMemo(() => buildCatalogTabs(sourceSkus), [sourceSkus])
+  const frozenBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'frozen'), [sourceSkus])
+  const foodBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'food'), [sourceSkus])
+  const treatsBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'treats'), [sourceSkus])
+  const toysBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'toys'), [sourceSkus])
+  const everythingElseBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'everything-else'), [sourceSkus])
 
-    return ['all', ...manufacturerTabs, 'treats', 'frozen', 'wellness']
-  }, [sourceSkus])
+  useEffect(() => {
+    setFrozenBrand('all')
+    setFoodBrand('all')
+    setTreatsBrand('all')
+    setToysBrand('all')
+    setEverythingElseBrand('all')
+  }, [activeTab])
 
   const filteredSkus = useMemo(() => {
     const lowerQuery = query.trim().toLowerCase()
 
     return sourceSkus.filter((sku) => {
-      let tabMatch = false
-      if (activeTab === 'all') {
-        tabMatch = true
-      } else if (activeTab === 'treats') {
-        tabMatch = sku.tab === 'treats'
-      } else if (activeTab === 'frozen' || activeTab === 'wellness') {
-        tabMatch = sku.tab === activeTab
-      } else {
-        tabMatch = sku.tab !== 'frozen' && sku.tab !== 'wellness' && sku.tab !== 'treats' && sku.manufacturer === activeTab
-      }
+      const tabMatch = matchesCatalogTab(sku, activeTab)
+      const brandMatch =
+        activeTab === 'frozen' ? (frozenBrand === 'all' || sku.manufacturer === frozenBrand) :
+        activeTab === 'food' ? (foodBrand === 'all' || sku.manufacturer === foodBrand) :
+        activeTab === 'treats' ? (treatsBrand === 'all' || sku.manufacturer === treatsBrand) :
+        activeTab === 'toys' ? (toysBrand === 'all' || sku.manufacturer === toysBrand) :
+        activeTab === 'everything-else' ? (everythingElseBrand === 'all' || sku.manufacturer === everythingElseBrand) :
+        true
 
       const animalMatch = animal === 'all' || sku.animal === animal
       const queryMatch =
@@ -167,10 +195,13 @@ export function FloorWalk() {
         sku.name.toLowerCase().includes(lowerQuery)
       const qty = qtyBySku.get(sku.id) ?? 0
       const zeroMatch = hideZeroQty ? qty > 0 : true
+      const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
+      const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
+      const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
 
-      return tabMatch && animalMatch && queryMatch && zeroMatch
+      return tabMatch && brandMatch && animalMatch && queryMatch && zeroMatch && zeroQohMatch && only111Match && doNotReorderMatch
     }).slice().sort(compareSkuByNameAndSize)
-  }, [sourceSkus, activeTab, animal, query, qtyBySku, hideZeroQty])
+  }, [sourceSkus, activeTab, animal, query, qtyBySku, hideZeroQty, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand])
 
   const addedLines = useMemo(
     () =>
@@ -224,6 +255,40 @@ export function FloorWalk() {
       if (nextQty === 0) return prev
       return [...prev, { skuId, quantity: nextQty }]
     })
+  }
+
+  async function flushFloorWalkLines() {
+    if (!id || !hydratedFromServerRef.current) return
+
+    if (saveTimerRef.current !== null) {
+      window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+
+    const payload: FloorWalkLinePayload[] = lineItems
+      .filter((line) => line.quantity > 0)
+      .map((line) => {
+        const sku = skuMap.get(line.skuId)
+        if (!sku) return null
+
+        return {
+          sku_id: line.skuId,
+          item_upc: sku.upc,
+          quantity: line.quantity,
+        }
+      })
+      .filter((line): line is FloorWalkLinePayload => line !== null)
+
+    await saveFloorWalkLines.mutateAsync(payload)
+  }
+
+  async function handleContinueToWorksheet() {
+    try {
+      await flushFloorWalkLines()
+      navigate(`/orders/${id}`)
+    } catch {
+      setScanMessage('Could not save floor walk lines. Please wait for save confirmation and retry.')
+    }
   }
 
   function findSkuFromScan(rawValue: string): ChairSku | undefined {
@@ -349,25 +414,129 @@ export function FloorWalk() {
                 />
                 Hide zero qty
               </label>
+              <label className={cn('flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
+                <input
+                  type="checkbox"
+                  checked={onlyZeroQoh}
+                  onChange={(event) => setOnlyZeroQoh(event.target.checked)}
+                />
+                Zero QoH
+              </label>
+              <label className={cn('flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
+                <input
+                  type="checkbox"
+                  checked={only111}
+                  onChange={(event) => setOnly111(event.target.checked)}
+                />
+                111
+              </label>
+              <label className={cn('flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
+                <input
+                  type="checkbox"
+                  checked={hideDoNotReorder}
+                  onChange={(event) => setHideDoNotReorder(event.target.checked)}
+                />
+                Hide Do Not Reorder
+              </label>
             </div>
 
             <div className={cn('mb-3 flex flex-wrap gap-2 border-b pb-3', uiMode === 'dark' ? 'border-[#23314A]' : 'border-amber-200')}>
               {tabOptions.map((tab) => (
                 <button
-                  key={tab}
+                  key={tab.key}
                   className={cn(
                     'rounded-full border px-3 py-1 text-xs uppercase tracking-wide',
-                    activeTab === tab
+                    activeTab === tab.key
                       ? (uiMode === 'dark' ? 'border-sky-500 bg-sky-500/20 text-sky-300' : 'border-teal-700 bg-teal-700 text-white')
                       : (uiMode === 'dark' ? 'border-[#25324A] bg-transparent text-slate-400' : 'border-amber-300 bg-amber-50 text-stone-700'),
                   )}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => setActiveTab(tab.key)}
                   type="button"
                 >
-                  {tab}
+                  {tab.label}
                 </button>
               ))}
             </div>
+
+            {activeTab === 'food' && (
+              <div className="mb-3 flex items-center gap-2 text-xs">
+                <span className={cn(getMutedTextClass(uiMode))}>Food brand</span>
+                <select
+                  className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                  value={foodBrand}
+                  onChange={(event) => setFoodBrand(event.target.value)}
+                >
+                  <option value="all">All Brands</option>
+                  {foodBrandOptions.map((brand) => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {activeTab === 'frozen' && (
+              <div className="mb-3 flex items-center gap-2 text-xs">
+                <span className={cn(getMutedTextClass(uiMode))}>Frozen brand</span>
+                <select
+                  className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                  value={frozenBrand}
+                  onChange={(event) => setFrozenBrand(event.target.value)}
+                >
+                  <option value="all">All Brands</option>
+                  {frozenBrandOptions.map((brand) => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {activeTab === 'treats' && (
+              <div className="mb-3 flex items-center gap-2 text-xs">
+                <span className={cn(getMutedTextClass(uiMode))}>Treat brand</span>
+                <select
+                  className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                  value={treatsBrand}
+                  onChange={(event) => setTreatsBrand(event.target.value)}
+                >
+                  <option value="all">All Brands</option>
+                  {treatsBrandOptions.map((brand) => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {activeTab === 'toys' && (
+              <div className="mb-3 flex items-center gap-2 text-xs">
+                <span className={cn(getMutedTextClass(uiMode))}>Toy brand</span>
+                <select
+                  className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                  value={toysBrand}
+                  onChange={(event) => setToysBrand(event.target.value)}
+                >
+                  <option value="all">All Brands</option>
+                  {toysBrandOptions.map((brand) => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {activeTab === 'everything-else' && (
+              <div className="mb-3 flex items-center gap-2 text-xs">
+                <span className={cn(getMutedTextClass(uiMode))}>Everything Else brand</span>
+                <select
+                  className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                  value={everythingElseBrand}
+                  onChange={(event) => setEverythingElseBrand(event.target.value)}
+                >
+                  <option value="all">All Brands</option>
+                  {everythingElseBrandOptions.map((brand) => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {!catalogQuery.isLoading && sourceSkus.length === 0 && (
               <div className={cn('mb-3 rounded border px-3 py-2 text-sm', uiMode === 'dark' ? 'border-red-800 bg-red-950/30 text-red-200' : 'border-red-200 bg-red-50 text-red-700')}>
@@ -544,7 +713,7 @@ export function FloorWalk() {
               >
                 Back to Orders
               </Button>
-              <Button onClick={() => navigate(`/orders/${id}`)}>
+              <Button onClick={handleContinueToWorksheet} disabled={saveFloorWalkLines.isPending}>
                 Continue to Worksheet
               </Button>
             </div>

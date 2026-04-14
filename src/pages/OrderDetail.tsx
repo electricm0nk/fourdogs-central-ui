@@ -35,6 +35,7 @@ import {
 import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
+import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
 
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
@@ -65,13 +66,21 @@ export function OrderDetail() {
   const sourceSkus = catalogQuery.data ?? []
   const catalogSource = sourceSkus.length > 0 ? 'live' : 'none'
   const [lineItems, setLineItems] = useState<Array<{ skuId: string; quantity: number }>>([])
-  const seededRef = useRef(false)
+  const worksheetEditedRef = useRef(false)
   const [uiMode, setUiMode] = useState<UiMode>(() => readUiMode())
 
   // Worksheet filter state
-  const [activeTab, setActiveTab] = useState<string>('all')
+  const [activeTab, setActiveTab] = useState<CatalogTabKey>('all')
   const [animal, setAnimal] = useState<AnimalFilter>('all')
   const [hideZeroQty, setHideZeroQty] = useState(false)
+  const [onlyZeroQoh, setOnlyZeroQoh] = useState(false)
+  const [only111, setOnly111] = useState(false)
+  const [hideDoNotReorder, setHideDoNotReorder] = useState(true)
+  const [frozenBrand, setFrozenBrand] = useState('all')
+  const [foodBrand, setFoodBrand] = useState('all')
+  const [treatsBrand, setTreatsBrand] = useState('all')
+  const [toysBrand, setToysBrand] = useState('all')
+  const [everythingElseBrand, setEverythingElseBrand] = useState('all')
   const [wsQuery, setWsQuery] = useState('')
 
   // Kaylee recommends panel state
@@ -122,16 +131,23 @@ export function OrderDetail() {
     enabled: !!id,
   })
 
-  // Seed from floor walk lines once both are available
   useEffect(() => {
-    if (!order || seededRef.current) return
+    worksheetEditedRef.current = false
+    setLineItems([])
+  }, [id])
+
+  // Keep worksheet seeded from floor-walk lines until the user edits locally.
+  useEffect(() => {
     if (!floorWalkLinesQuery.isSuccess) return
-    seededRef.current = true
+
+    if (worksheetEditedRef.current) return
+
     const floorWalkItems = (floorWalkLinesQuery.data ?? [])
       .filter((line) => line.quantity > 0)
       .map((line) => ({ skuId: line.sku_id, quantity: line.quantity }))
+
     setLineItems(floorWalkItems)
-  }, [order, floorWalkLinesQuery.isSuccess, floorWalkLinesQuery.data])
+  }, [floorWalkLinesQuery.isSuccess, floorWalkLinesQuery.data])
 
   const importedSkuIds = useMemo(
     () => new Set((floorWalkLinesQuery.data ?? []).filter((line) => line.quantity > 0).map((line) => line.sku_id)),
@@ -153,37 +169,42 @@ export function OrderDetail() {
     [lineItems],
   )
 
-  const tabOptions = useMemo(() => {
-    const mfrs = Array.from(
-      new Set(
-        sourceSkus
-          .filter((sku) => !['treats', 'frozen', 'wellness'].includes(sku.tab))
-          .map((sku) => sku.manufacturer || 'Other'),
-      ),
-    ).sort()
-    return ['all', ...mfrs, 'treats', 'frozen', 'wellness']
-  }, [sourceSkus])
+  const tabOptions = useMemo(() => buildCatalogTabs(sourceSkus), [sourceSkus])
+  const frozenBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'frozen'), [sourceSkus])
+  const foodBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'food'), [sourceSkus])
+  const treatsBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'treats'), [sourceSkus])
+  const toysBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'toys'), [sourceSkus])
+  const everythingElseBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'everything-else'), [sourceSkus])
+
+  useEffect(() => {
+    setFrozenBrand('all')
+    setFoodBrand('all')
+    setTreatsBrand('all')
+    setToysBrand('all')
+    setEverythingElseBrand('all')
+  }, [activeTab])
 
   const filteredCatalog = useMemo(() => {
     const lq = wsQuery.trim().toLowerCase()
     return sourceSkus.filter((sku) => {
-      let tabMatch = false
-      if (activeTab === 'all') {
-        tabMatch = true
-      } else if (activeTab === 'treats') {
-        tabMatch = sku.tab === 'treats'
-      } else if (activeTab === 'frozen' || activeTab === 'wellness') {
-        tabMatch = sku.tab === activeTab
-      } else {
-        tabMatch = sku.tab !== 'frozen' && sku.tab !== 'wellness' && sku.tab !== 'treats' && sku.manufacturer === activeTab
-      }
+      const tabMatch = matchesCatalogTab(sku, activeTab)
+      const brandMatch =
+        activeTab === 'frozen' ? (frozenBrand === 'all' || sku.manufacturer === frozenBrand) :
+        activeTab === 'food' ? (foodBrand === 'all' || sku.manufacturer === foodBrand) :
+        activeTab === 'treats' ? (treatsBrand === 'all' || sku.manufacturer === treatsBrand) :
+        activeTab === 'toys' ? (toysBrand === 'all' || sku.manufacturer === toysBrand) :
+        activeTab === 'everything-else' ? (everythingElseBrand === 'all' || sku.manufacturer === everythingElseBrand) :
+        true
       const animalMatch = animal === 'all' || sku.animal === animal
       const queryMatch = !lq || sku.id.toLowerCase().includes(lq) || sku.name.toLowerCase().includes(lq)
       const qty = qtyBySku.get(sku.id) ?? 0
       const zeroMatch = hideZeroQty ? qty > 0 : true
-      return tabMatch && animalMatch && queryMatch && zeroMatch
+      const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
+      const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
+      const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
+      return tabMatch && brandMatch && animalMatch && queryMatch && zeroMatch && zeroQohMatch && only111Match && doNotReorderMatch
     }).sort(compareSkuByNameAndSize)
-  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku])
+  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand])
 
   function tierLabel(tier: 1 | 2 | 3 | 4): string {
     return getPrototypeSignalLabel(tier)
@@ -191,6 +212,7 @@ export function OrderDetail() {
 
   function applyKayleeRecommendations() {
     if (!order) return
+    worksheetEditedRef.current = true
     setRecLoading(true)
     const budget = typeof order.budget_cents === 'number' && order.budget_cents > 0
       ? order.budget_cents
@@ -239,6 +261,7 @@ export function OrderDetail() {
   }
 
   function upsertLineQuantity(skuId: string, quantity: number) {
+    worksheetEditedRef.current = true
     setLineItems((prev) => {
       const nextQty = Math.max(0, quantity)
       const existingIndex = prev.findIndex((line) => line.skuId === skuId)
@@ -488,26 +511,118 @@ export function OrderDetail() {
               <input type="checkbox" checked={hideZeroQty} onChange={(e) => setHideZeroQty(e.target.checked)} />
               Hide zero qty
             </label>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={onlyZeroQoh} onChange={(e) => setOnlyZeroQoh(e.target.checked)} />
+              Zero QoH
+            </label>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={only111} onChange={(e) => setOnly111(e.target.checked)} />
+              111
+            </label>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={hideDoNotReorder} onChange={(e) => setHideDoNotReorder(e.target.checked)} />
+              Hide Do Not Reorder
+            </label>
           </div>
 
           {/* Tab pills */}
           <div className={cn('mb-2 flex flex-wrap gap-1.5 border-b pb-2', uiMode === 'dark' ? 'border-[#23314A]' : 'border-amber-200')}>
             {tabOptions.map((tab) => (
               <button
-                key={tab}
+                key={tab.key}
                 type="button"
                 className={cn(
                   'rounded-full border px-3 py-0.5 text-xs uppercase tracking-wide',
-                  activeTab === tab
+                  activeTab === tab.key
                     ? (uiMode === 'dark' ? 'border-sky-500 bg-sky-500/20 text-sky-300' : 'border-teal-700 bg-teal-700 text-white')
                     : (uiMode === 'dark' ? 'border-[#25324A] bg-transparent text-slate-400' : 'border-amber-300 bg-amber-50 text-stone-700'),
                 )}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => setActiveTab(tab.key)}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </div>
+
+          {activeTab === 'food' && (
+            <div className="mb-2 flex items-center gap-2 text-xs">
+              <span className={cn(getMutedTextClass(uiMode))}>Food brand</span>
+              <select
+                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                value={foodBrand}
+                onChange={(event) => setFoodBrand(event.target.value)}
+              >
+                <option value="all">All Brands</option>
+                {foodBrandOptions.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {activeTab === 'frozen' && (
+            <div className="mb-2 flex items-center gap-2 text-xs">
+              <span className={cn(getMutedTextClass(uiMode))}>Frozen brand</span>
+              <select
+                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                value={frozenBrand}
+                onChange={(event) => setFrozenBrand(event.target.value)}
+              >
+                <option value="all">All Brands</option>
+                {frozenBrandOptions.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {activeTab === 'treats' && (
+            <div className="mb-2 flex items-center gap-2 text-xs">
+              <span className={cn(getMutedTextClass(uiMode))}>Treat brand</span>
+              <select
+                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                value={treatsBrand}
+                onChange={(event) => setTreatsBrand(event.target.value)}
+              >
+                <option value="all">All Brands</option>
+                {treatsBrandOptions.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {activeTab === 'toys' && (
+            <div className="mb-2 flex items-center gap-2 text-xs">
+              <span className={cn(getMutedTextClass(uiMode))}>Toy brand</span>
+              <select
+                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                value={toysBrand}
+                onChange={(event) => setToysBrand(event.target.value)}
+              >
+                <option value="all">All Brands</option>
+                {toysBrandOptions.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {activeTab === 'everything-else' && (
+            <div className="mb-2 flex items-center gap-2 text-xs">
+              <span className={cn(getMutedTextClass(uiMode))}>Everything Else brand</span>
+              <select
+                className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                value={everythingElseBrand}
+                onChange={(event) => setEverythingElseBrand(event.target.value)}
+              >
+                <option value="all">All Brands</option>
+                {everythingElseBrandOptions.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className={cn('mb-1 flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
             <span>Showing {filteredCatalog.length.toLocaleString()} of {sourceSkus.length.toLocaleString()} SKUs</span>
