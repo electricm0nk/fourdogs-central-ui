@@ -267,7 +267,7 @@ export function OrderDetail() {
     setStreamStatus('streaming')
     setKayleeError('')
 
-    const candidateRoots = ['/dev-api']
+    const candidateRoots = ['', '/dev-api']
     const safeOrderId = order?.id ?? id ?? ''
     if (!safeOrderId) {
       setStreamStatus('error')
@@ -276,10 +276,13 @@ export function OrderDetail() {
     }
 
     let messageResponse: Response | null = null
-    let resolvedRoot = '/dev-api'
+    let resolvedRoot = ''
     let lastStatus = 0
+    let lastErrorMessage = ''
 
-    for (const root of candidateRoots) {
+    for (let i = 0; i < candidateRoots.length; i += 1) {
+      const root = candidateRoots[i]
+      const isLastRoot = i === candidateRoots.length - 1
       const res = await fetch(`${root}/v1/orders/${safeOrderId}/kaylee/message`, {
         method: 'POST',
         credentials: 'include',
@@ -292,7 +295,11 @@ export function OrderDetail() {
     try {
       const contentType = res.headers.get('content-type') ?? ''
       if (!contentType.includes('application/json')) {
-        throw new Error('Kaylee returned an unexpected response (not JSON — session may have expired or endpoint is unavailable)')
+        lastErrorMessage = 'Kaylee returned an unexpected response (not JSON — session may have expired or endpoint is unavailable)'
+        if (isLastRoot) {
+          throw new Error(lastErrorMessage)
+        }
+        continue
       }
       if (res.ok) {
         messageResponse = res
@@ -301,20 +308,21 @@ export function OrderDetail() {
       }
 
       lastStatus = res.status
-      const shouldTryFallback = res.status === 502 && root !== '/dev-api'
-      if (!shouldTryFallback) {
-        throw new Error(`POST /kaylee/message failed (HTTP ${res.status}) at ${root}`)
+      lastErrorMessage = `POST /kaylee/message failed (HTTP ${res.status}) at ${root || '/'} `
+      if (isLastRoot) {
+        throw new Error(lastErrorMessage.trim())
       }
     } catch (fetchErr) {
-      if (fetchErr instanceof Error && fetchErr.message.includes('not JSON')) throw fetchErr
+      if (fetchErr instanceof Error) {
+        lastErrorMessage = fetchErr.message
+      }
       lastStatus = 0
-      const shouldTryFallback = root !== '/dev-api'
-      if (!shouldTryFallback) throw fetchErr
+      if (isLastRoot) throw fetchErr
     }
     }
 
     if (!messageResponse) {
-      throw new Error(`POST /kaylee/message failed (HTTP ${lastStatus || 502})`)
+      throw new Error(lastErrorMessage || `POST /kaylee/message failed (HTTP ${lastStatus || 502})`)
     }
 
     const messageBody = (await messageResponse.json().catch(() => {
