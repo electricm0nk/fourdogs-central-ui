@@ -27,7 +27,7 @@ import {
   readUiMode,
   type UiMode,
 } from '@/lib/orderGrid'
-import { exportEtpXlsx, exportFullXlsx, type ExportLine } from '@/lib/exportXlsx'
+import type { ExportLine } from '@/lib/exportXlsx'
 import { cn } from '@/lib/utils'
 import type { Order } from '@/types/order'
 
@@ -88,6 +88,7 @@ function OrderActions({
           name: skuMap.get(l.sku_id)?.name ?? l.sku_id,
           qty: l.quantity,
         }))
+      const { exportEtpXlsx } = await import('@/lib/exportXlsx')
       await exportEtpXlsx(exportLines, orderTitle)
     } finally {
       setExporting(null)
@@ -110,6 +111,7 @@ function OrderActions({
             qty: l.quantity,
           }
         })
+      const { exportFullXlsx } = await import('@/lib/exportXlsx')
       await exportFullXlsx(exportLines, orderTitle)
     } finally {
       setExporting(null)
