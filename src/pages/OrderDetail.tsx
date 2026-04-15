@@ -347,43 +347,6 @@ export function OrderDetail() {
     selectedSignalFilters,
   ])
 
-  const visibleWorksheetRange = useMemo(() => {
-    const total = filteredCatalog.length
-    const startIndex = Math.max(0, Math.floor(worksheetScrollTop / TABLE_ROW_HEIGHT_PX) - TABLE_OVERSCAN_ROWS)
-    const endIndex = Math.min(
-      total,
-      Math.ceil((worksheetScrollTop + worksheetViewportHeight) / TABLE_ROW_HEIGHT_PX) + TABLE_OVERSCAN_ROWS,
-    )
-
-    return {
-      startIndex,
-      endIndex,
-      topSpacerHeight: startIndex * TABLE_ROW_HEIGHT_PX,
-      bottomSpacerHeight: Math.max(0, (total - endIndex) * TABLE_ROW_HEIGHT_PX),
-      rows: filteredCatalog.slice(startIndex, endIndex),
-    }
-  }, [filteredCatalog, worksheetScrollTop, worksheetViewportHeight])
-
-  useEffect(() => {
-    setWorksheetScrollTop(0)
-    worksheetViewportRef.current?.scrollTo({ top: 0, behavior: 'auto' })
-  }, [
-    activeTab,
-    animal,
-    wsQuery,
-    hideTabs,
-    hideZeroQty,
-    onlyZeroQoh,
-    only111,
-    hideDoNotReorder,
-    frozenBrand,
-    foodBrand,
-    treatsBrand,
-    toysBrand,
-    everythingElseBrand,
-    selectedSignalFilters,
-  ])
-
   function toggleSignalFilter(filter: SignalFilterKey) {
     setSelectedSignalFilters((prev) => (prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]))
   }
