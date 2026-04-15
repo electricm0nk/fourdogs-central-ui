@@ -1,4 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useParams, useNavigate } from 'react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
@@ -1105,7 +1107,27 @@ export function OrderDetail() {
                     : getKayleeBubbleClass(uiMode),
                 )}
               >
-                {message.text || (streamStatus === 'streaming' && message.role === 'kaylee' ? '...' : '')}
+                {message.role === 'kaylee' ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      table: ({ children }) => (
+                        <table className="my-1 w-full border-collapse text-xs">{children}</table>
+                      ),
+                      th: ({ children }) => (
+                        <th className="border border-amber-300 bg-amber-100 px-2 py-1 text-left font-semibold">{children}</th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="border border-amber-200 px-2 py-1">{children}</td>
+                      ),
+                      p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                    }}
+                  >
+                    {message.text || (streamStatus === 'streaming' ? '...' : '')}
+                  </ReactMarkdown>
+                ) : (
+                  message.text
+                )}
               </div>
             ))}
             <div ref={chatBottomRef} />
