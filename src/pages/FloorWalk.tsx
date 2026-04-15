@@ -77,6 +77,7 @@ export function FloorWalk() {
   const [toysBrand, setToysBrand] = useState('all')
   const [everythingElseBrand, setEverythingElseBrand] = useState('all')
   const [query, setQuery] = useState('')
+  const [selectedSideBrand, setSelectedSideBrand] = useState<string | null>(null)
   const [scanMode, setScanMode] = useState<ScanMode>('add')
   const [scanInput, setScanInput] = useState('')
   const [scanMessage, setScanMessage] = useState('')
@@ -380,7 +381,10 @@ export function FloorWalk() {
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  setSelectedSideBrand(null)
+                }}
                 placeholder="Search SKU, UPC, or name"
                 className="max-w-xs"
               />
@@ -774,15 +778,44 @@ export function FloorWalk() {
         <h3 className="text-sm font-semibold">Brand Filters</h3>
         <p className={cn('mt-1 text-xs', getMutedTextClass(uiMode))}>All brands currently available for filtering.</p>
         <div className="mt-3 h-[calc(100vh-100px)] overflow-auto rounded border p-2">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('all')
+              setQuery('')
+              setSelectedSideBrand(null)
+            }}
+            aria-pressed={selectedSideBrand === null}
+            className={cn(
+              'mb-1 block w-full rounded px-2 py-1 text-left text-xs font-semibold',
+              selectedSideBrand === null
+                ? (uiMode === 'dark' ? 'bg-sky-700/40 text-sky-200' : 'bg-teal-700 text-white')
+                : (uiMode === 'dark' ? 'hover:bg-[#13233C]' : 'hover:bg-amber-100'),
+            )}
+          >
+            All
+          </button>
           {allBrands.map((brand) => (
             <button
               key={brand}
               type="button"
               onClick={() => {
                 setActiveTab('all')
+                if (selectedSideBrand === brand) {
+                  setSelectedSideBrand(null)
+                  setQuery('')
+                  return
+                }
+                setSelectedSideBrand(brand)
                 setQuery(brand)
               }}
-              className={cn('mb-1 block w-full rounded px-2 py-1 text-left text-xs', uiMode === 'dark' ? 'hover:bg-[#13233C]' : 'hover:bg-amber-100')}
+              aria-pressed={selectedSideBrand === brand}
+              className={cn(
+                'mb-1 block w-full rounded px-2 py-1 text-left text-xs',
+                selectedSideBrand === brand
+                  ? (uiMode === 'dark' ? 'bg-sky-700/40 text-sky-200' : 'bg-teal-700 text-white')
+                  : (uiMode === 'dark' ? 'hover:bg-[#13233C]' : 'hover:bg-amber-100'),
+              )}
             >
               {brand}
             </button>
