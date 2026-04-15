@@ -188,6 +188,10 @@ export function OrderDetail() {
     },
   })
 
+  const saveFloorWalkLines = useMutation({
+    mutationFn: (lines: FloorWalkLinePayload[]) =>
+      api.put<{ data: { saved: boolean } }>(`/v1/orders/${id}/floor-walk-lines`, { lines }),
+  })
 
   useEffect(() => {
     worksheetEditedRef.current = false
@@ -206,6 +210,23 @@ export function OrderDetail() {
 
     setLineItems(floorWalkItems)
   }, [floorWalkLinesQuery.isSuccess, floorWalkLinesQuery.data])
+
+  // Debounced autosave — fires 600ms after the last line-item change.
+  useEffect(() => {
+    if (!worksheetEditedRef.current) return
+    if (!id) return
+
+    const timer = setTimeout(() => {
+      const lines: FloorWalkLinePayload[] = lineItems.map((item) => ({
+        sku_id: item.skuId,
+        item_upc: skuMap.get(item.skuId)?.upc ?? '',
+        quantity: item.quantity,
+      }))
+      saveFloorWalkLines.mutate(lines)
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [lineItems, id])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const importedSkuIds = useMemo(
     () => new Set((floorWalkLinesQuery.data ?? []).filter((line) => line.quantity > 0).map((line) => line.sku_id)),
