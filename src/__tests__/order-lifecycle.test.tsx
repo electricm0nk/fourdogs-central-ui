@@ -353,6 +353,42 @@ describe('OrderDetail — submit lifecycle', () => {
     })
   })
 
+  it('applies INCREASED tag when adding a new worksheet item with the plus button', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: {
+        ...activeOrder,
+        budget_cents: 1_000,
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      const path = String(url)
+      if (path.includes('/floor-walk-lines')) {
+        return { data: [] }
+      }
+      if (path === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getByText('Zebra Freeze Dried')).toBeInTheDocument()
+    })
+
+    const row = screen.getByText('Zebra Freeze Dried').closest('tr')
+    expect(row).not.toBeNull()
+
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-fw-1/i }))
+
+    await waitFor(() => {
+      expect(within(row as HTMLTableRowElement).getByText('INCREASED')).toBeInTheDocument()
+      expect(within(row as HTMLTableRowElement).queryByText('DECREASED')).not.toBeInTheDocument()
+    })
+  })
+
   it('applies legend signal filters as multi-select AND (hot + increased)', async () => {
     vi.mocked(useOrder).mockReturnValue({
       data: {

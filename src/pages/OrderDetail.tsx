@@ -248,12 +248,13 @@ export function OrderDetail() {
     [lineItems],
   )
 
-  function resolveSkuTier(qty: number, kayleeQty: number | undefined): 1 | 2 | 3 | 4 {
+  function resolveSkuTier(qty: number, kayleeQty: number | undefined, isImported: boolean): 1 | 2 | 3 | 4 {
     if (kayleeQty !== undefined) {
       if (qty > kayleeQty) return 1
       if (qty === kayleeQty) return 2
       return 3
     }
+    if (!isImported && qty > 0) return 1
     return getQtyConfidenceTier(qty)
   }
 
@@ -294,8 +295,8 @@ export function OrderDetail() {
       const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
       const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
       const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
-      const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id))
       const isPriority = importedSkuIds.has(sku.id)
+      const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id), isPriority)
       const signalMatch = selectedSignalFilters.every((filter) => {
         if (filter === 'hot') return sku.velocity === 'fast'
         if (filter === 'tier-1') return tier === 1
@@ -975,8 +976,8 @@ export function OrderDetail() {
                   const qty = qtyBySku.get(sku.id) ?? 0
                   const isLocked = lockedBySku.get(sku.id) ?? false
                   const lineTotal = sku.priceCents * qty
-                  const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id))
                   const isPriority = importedSkuIds.has(sku.id)
+                  const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id), isPriority)
 
                   return (
                     <tr
