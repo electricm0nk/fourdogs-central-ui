@@ -8,7 +8,7 @@ import { useOrderItems } from '@/hooks/use_order_items'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
 import { useLogLearning } from '@/hooks/use_log_learning'
 import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
-import { useKayleeStream } from '@/hooks/use_kaylee_stream'
+
 
 vi.mock('@/hooks/use_order_items', () => ({ useOrderItems: vi.fn() }))
 vi.mock('@/hooks/use_patch_order_item', () => ({ usePatchOrderItem: vi.fn() }))

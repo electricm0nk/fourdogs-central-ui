@@ -7,10 +7,6 @@ import { useOrderItems } from '@/hooks/use_order_items'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
 import { useLogLearning } from '@/hooks/use_log_learning'
 import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
-import { useKayleeStream } from '@/hooks/use_kaylee_stream'
-import { useCurrentUser } from '@/hooks/use_current_user'
-import { useKayleeMessage } from '@/hooks/use_kaylee_message'
-import { usePatchPreferences } from '@/hooks/use_patch_preferences'
 import type { OrderItem } from '@/types/order_item'
 
 vi.mock('@/hooks/use_order_items', () => ({ useOrderItems: vi.fn() }))
