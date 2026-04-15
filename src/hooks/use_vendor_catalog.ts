@@ -74,8 +74,9 @@ function normalizeItem(row: RawItem, idx: number): ChairSku {
     animal,
     pack: String(rawMultiples),
     priceCents: Math.max(priceCents, 0),
-    velocity: 'medium', // TODO: derive from sales velocity data once available
+    velocity: row.vc === 'fast' ? 'fast' : row.vc === 'medium' ? 'medium' : 'slow',
     qoh,
+    suggestedQty: typeof row.o === 'number' && row.o > 0 ? row.o : undefined,
     reorderStatus,
     doNotReorder,
   }
