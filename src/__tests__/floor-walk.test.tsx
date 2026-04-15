@@ -1,19 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { OrderDetail } from '@/pages/OrderDetail'
+import { FloorWalk } from '@/pages/FloorWalk'
 import { useOrder } from '@/hooks/use_order'
-import { useOrderItems } from '@/hooks/use_order_items'
-import { useSubmitOrder, useArchiveOrder } from '@/hooks/use_order_mutations'
+import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
+import { api } from '@/lib/api'
 import type { Order } from '@/types/order'
-import type { OrderItem } from '@/types/order_item'
+import type { ChairSku } from '@/lib/chairSandboxMock'
 
 vi.mock('@/hooks/use_order', () => ({ useOrder: vi.fn() }))
-vi.mock('@/hooks/use_order_items', () => ({ useOrderItems: vi.fn() }))
-vi.mock('@/hooks/use_order_mutations', () => ({
-  useSubmitOrder: vi.fn(),
-  useArchiveOrder: vi.fn(),
+vi.mock('@/hooks/use_vendor_catalog', () => ({ useVendorCatalog: vi.fn() }))
+vi.mock('@/lib/api', () => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }))
 
 const mockOrder: Order = {
@@ -27,44 +26,46 @@ const mockOrder: Order = {
   created_at: '2026-04-12T00:00:00Z',
 }
 
-const mustHaveItem: OrderItem = {
-  id: '00000000-0000-0000-0000-000000000010',
-  order_id: mockOrder.id,
-  item_id: 'SKU-001',
-  item_name: 'Bark Biscuits',
-  category: 'snacks',
-  current_stock_qty: 0,
-  velocity_tier: 'high',
-  must_have: true,
-  final_qty: 0,
-  ghost_qty: null,
-  confidence_tier: null,
-}
+const catalogSkus: ChairSku[] = [
+  {
+    id: 'SKU-001',
+    upc: '000000000001',
+    name: 'Bark Biscuits',
+    tab: 'core',
+    category: 'snacks',
+    manufacturer: 'Brand A',
+    animal: 'dog',
+    pack: '1',
+    priceCents: 500,
+    velocity: 'fast',
+    qoh: 0,
+    reorderStatus: 'SMART_ORDER',
+    doNotReorder: false,
+  },
+  {
+    id: 'SKU-002',
+    upc: '000000000002',
+    name: 'Dog Food 24lb',
+    tab: 'core',
+    category: 'food',
+    manufacturer: 'Brand B',
+    animal: 'dog',
+    pack: '1',
+    priceCents: 2000,
+    velocity: 'slow',
+    qoh: 5,
+    reorderStatus: 'SMART_ORDER',
+    doNotReorder: false,
+  },
+]
 
-const regularItem: OrderItem = {
-  id: '00000000-0000-0000-0000-000000000011',
-  order_id: mockOrder.id,
-  item_id: 'SKU-002',
-  item_name: 'Dog Food 24lb',
-  category: 'food',
-  current_stock_qty: 5,
-  velocity_tier: null,
-  must_have: false,
-  final_qty: 3,
-  ghost_qty: null,
-  confidence_tier: null,
-}
-
-function wrapper(id: string, search = '') {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
-  const path = search ? `/orders/${id}?tab=floorwalk` : `/orders/${id}?tab=floorwalk`
+function wrapper(id: string) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[`/orders/${id}/floor-walk`]}>
         <Routes>
-          <Route path="/orders/:id" element={<OrderDetail />} />
+          <Route path="/orders/:id/floor-walk" element={<FloorWalk />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -74,80 +75,103 @@ function wrapper(id: string, search = '') {
 describe('Floor Walk Tab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(api.get).mockResolvedValue({ data: [] })
+    vi.mocked(api.post).mockResolvedValue({ data: {} })
+  })
+
+  it('shows Floor Walk page heading', async () => {
     vi.mocked(useOrder).mockReturnValue({
       data: mockOrder,
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useOrder>)
-    vi.mocked(useSubmitOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useSubmitOrder>)
-    vi.mocked(useArchiveOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useArchiveOrder>)
-  })
-
-  it('shows Floor Walk tab on order detail page', () => {
-    vi.mocked(useOrderItems).mockReturnValue({
+    vi.mocked(useVendorCatalog).mockReturnValue({
       data: [],
       isLoading: false,
+      isError: false,
       error: null,
-    } as unknown as ReturnType<typeof useOrderItems>)
+    } as unknown as ReturnType<typeof useVendorCatalog>)
 
     render(wrapper(mockOrder.id))
 
-    expect(screen.getByRole('tab', { name: /floor walk/i })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Floor Walk')).toBeInTheDocument())
   })
 
-  it('renders item list when Floor Walk tab is active', () => {
-    vi.mocked(useOrderItems).mockReturnValue({
-      data: [mustHaveItem, regularItem],
+  it('renders item list from catalog', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: mockOrder,
       isLoading: false,
       error: null,
-    } as unknown as ReturnType<typeof useOrderItems>)
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: catalogSkus,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
 
     render(wrapper(mockOrder.id))
 
-    expect(screen.getByText('Bark Biscuits')).toBeInTheDocument()
-    expect(screen.getByText('Dog Food 24lb')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Bark Biscuits')).toBeInTheDocument()
+      expect(screen.getByText('Dog Food 24lb')).toBeInTheDocument()
+    })
   })
 
-  it('shows must-have badge on must-have items', () => {
-    vi.mocked(useOrderItems).mockReturnValue({
-      data: [mustHaveItem],
+  it('shows increase/decrease buttons for each item', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: mockOrder,
       isLoading: false,
       error: null,
-    } as unknown as ReturnType<typeof useOrderItems>)
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: catalogSkus,
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
 
     render(wrapper(mockOrder.id))
 
-    expect(screen.getByText(/must.have/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /increase sku-001/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /decrease sku-001/i })).toBeInTheDocument()
+    })
   })
 
-  it('shows loading skeleton while items fetch', () => {
-    vi.mocked(useOrderItems).mockReturnValue({
+  it('shows loading state while order loads', () => {
+    vi.mocked(useOrder).mockReturnValue({
       data: undefined,
       isLoading: true,
       error: null,
-    } as unknown as ReturnType<typeof useOrderItems>)
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
 
     render(wrapper(mockOrder.id))
 
-    // 5 skeleton rows
-    expect(screen.getAllByTestId('item-skeleton').length).toBe(5)
+    expect(screen.getByText(/loading floor walk/i)).toBeInTheDocument()
   })
 
-  it('shows empty state when no items', () => {
-    vi.mocked(useOrderItems).mockReturnValue({
-      data: [],
+  it('shows zero-catalog message when catalog returns empty', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: mockOrder,
       isLoading: false,
       error: null,
-    } as unknown as ReturnType<typeof useOrderItems>)
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
 
     render(wrapper(mockOrder.id))
 
-    expect(screen.getByText(/no items on this order/i)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText(/live catalog returned zero items/i)).toBeInTheDocument())
   })
 })

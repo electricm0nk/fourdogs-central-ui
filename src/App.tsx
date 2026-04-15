@@ -1,14 +1,21 @@
+import { lazy, Suspense } from 'react'
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router'
 import { LoginPage } from '@/pages/LoginPage'
-import { Dashboard } from '@/pages/Dashboard'
-import { OrderDetail } from '@/pages/OrderDetail'
-import { FloorWalk } from '@/pages/FloorWalk'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-import { ChairSandbox } from '@/pages/ChairSandbox'
+
+// Heavy pages — loaded only when their route is first visited
+const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })))
+const OrderDetail = lazy(() => import('@/pages/OrderDetail').then(m => ({ default: m.OrderDetail })))
+const FloorWalk = lazy(() => import('@/pages/FloorWalk').then(m => ({ default: m.FloorWalk })))
+const ChairSandbox = lazy(() => import('@/pages/ChairSandbox').then(m => ({ default: m.ChairSandbox })))
 
 // Root layout — wraps all routes
 function RootLayout() {
-  return <Outlet />
+  return (
+    <Suspense fallback={<div className="p-4 text-gray-400">Loading…</div>}>
+      <Outlet />
+    </Suspense>
+  )
 }
 
 function NotFound() {
