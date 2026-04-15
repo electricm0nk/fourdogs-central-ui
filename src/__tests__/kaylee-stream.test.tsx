@@ -1,44 +1,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { OrderDetail } from '@/pages/OrderDetail'
-import { useOrder } from '@/hooks/use_order'
+import { KayleePanel } from '@/components/KayleePanel'
 import { useOrderItems } from '@/hooks/use_order_items'
-import { useSubmitOrder, useArchiveOrder } from '@/hooks/use_order_mutations'
-import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
 import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
 import { useKayleeStream } from '@/hooks/use_kaylee_stream'
-import type { Order } from '@/types/order'
 import type { OrderItem } from '@/types/order_item'
 
-vi.mock('@/hooks/use_order', () => ({ useOrder: vi.fn() }))
 vi.mock('@/hooks/use_order_items', () => ({ useOrderItems: vi.fn() }))
-vi.mock('@/hooks/use_order_mutations', () => ({
-  useSubmitOrder: vi.fn(),
-  useArchiveOrder: vi.fn(),
-}))
-vi.mock('@/hooks/use_patch_order_item', () => ({ usePatchOrderItem: vi.fn() }))
 vi.mock('@/hooks/use_kaylee_analyze', () => ({ useKayleeAnalyze: vi.fn() }))
 vi.mock('@/hooks/use_kaylee_stream', () => ({ useKayleeStream: vi.fn() }))
-vi.mock('@/hooks/use_current_user', () => ({ useCurrentUser: vi.fn(() => ({ data: { preferences: { kaylee_mode: 'chatty', onboarding_shown: true } }, isLoading: false })) }))
+vi.mock('@/hooks/use_current_user', () => ({
+  useCurrentUser: vi.fn(() => ({
+    data: { preferences: { kaylee_mode: 'chatty', onboarding_shown: true } },
+    isLoading: false,
+  })),
+}))
 vi.mock('@/hooks/use_kaylee_message', () => ({ useKayleeMessage: vi.fn(() => ({ sendMessage: vi.fn() })) }))
 vi.mock('@/hooks/use_patch_preferences', () => ({ usePatchPreferences: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) }))
 
-const mockOrder: Order = {
-  id: '00000000-0000-0000-0000-000000000001',
-  vendor_adapter_id: '00000000-0000-0000-0000-000000000002',
-  vendor_name: 'Southeast Pet',
-  created_by: 'test-sub',
-  order_date: '2026-04-12',
-  submitted: false,
-  archived: false,
-  created_at: '2026-04-12T00:00:00Z',
-}
+const ORDER_ID = '00000000-0000-0000-0000-000000000001'
 
 const analyzedItem: OrderItem = {
   id: '00000000-0000-0000-0000-000000000011',
-  order_id: mockOrder.id,
+  order_id: ORDER_ID,
   item_id: 'SKU-001',
   item_name: 'Dog Food 24lb',
   category: 'food',
@@ -50,17 +35,11 @@ const analyzedItem: OrderItem = {
   confidence_tier: 2,
 }
 
-function wrapChair(id: string) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
+function makeKaylee() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/orders/${id}?tab=chair`]}>
-        <Routes>
-          <Route path="/orders/:id" element={<OrderDetail />} />
-        </Routes>
-      </MemoryRouter>
+    <QueryClientProvider client={qc}>
+      <KayleePanel orderId={ORDER_ID} />
     </QueryClientProvider>
   )
 }
@@ -70,36 +49,6 @@ describe('KayleeStream — streaming integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: (query: string) => ({
-        matches: query.includes('1280'),
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }),
-    })
-    vi.mocked(useOrder).mockReturnValue({
-      data: mockOrder,
-      isLoading: false,
-      error: null,
-    } as unknown as ReturnType<typeof useOrder>)
-    vi.mocked(useSubmitOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useSubmitOrder>)
-    vi.mocked(useArchiveOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useArchiveOrder>)
-    vi.mocked(usePatchOrderItem).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof usePatchOrderItem>)
     vi.mocked(useOrderItems).mockReturnValue({
       data: [analyzedItem],
       isLoading: false,
@@ -123,7 +72,7 @@ describe('KayleeStream — streaming integration', () => {
       start: mockStart,
     })
 
-    render(wrapChair(mockOrder.id))
+    render(makeKaylee())
 
     const streamPanel = screen.getByTestId('kaylee-stream')
     expect(streamPanel).toHaveTextContent('Let me review')
@@ -136,9 +85,8 @@ describe('KayleeStream — streaming integration', () => {
       start: mockStart,
     })
 
-    render(wrapChair(mockOrder.id))
+    render(makeKaylee())
 
-    // typing indicator visible during streaming
     expect(screen.getByTestId('kaylee-typing')).toBeInTheDocument()
   })
 
@@ -149,13 +97,13 @@ describe('KayleeStream — streaming integration', () => {
       start: mockStart,
     })
 
-    render(wrapChair(mockOrder.id))
+    render(makeKaylee())
 
     expect(screen.queryByTestId('kaylee-typing')).not.toBeInTheDocument()
   })
 
   it('calls start() when analyze succeeds (no null ghost_qty items)', () => {
-    const capturedCallbacks: Array<{onSuccess?: () => void}> = []
+    const capturedCallbacks: Array<{ onSuccess?: () => void }> = []
     vi.mocked(useKayleeAnalyze).mockReturnValue({
       mutate: vi.fn((_, opts?: { onSuccess?: () => void }) => {
         if (opts) capturedCallbacks.push(opts)
@@ -164,7 +112,6 @@ describe('KayleeStream — streaming integration', () => {
       isError: false,
     } as unknown as ReturnType<typeof useKayleeAnalyze>)
 
-    // Items have null ghost_qty → analyze should fire
     vi.mocked(useOrderItems).mockReturnValue({
       data: [{ ...analyzedItem, ghost_qty: null, confidence_tier: null }],
       isLoading: false,
@@ -177,9 +124,8 @@ describe('KayleeStream — streaming integration', () => {
       start: mockStart,
     })
 
-    render(wrapChair(mockOrder.id))
+    render(makeKaylee())
 
-    // Simulate analyze succeeding
     act(() => {
       capturedCallbacks[0]?.onSuccess?.()
     })
@@ -194,8 +140,7 @@ describe('KayleeStream — streaming integration', () => {
       start: mockStart,
     })
 
-    // Items all have ghost_qty set → analyze not triggered → start() not called.
-    const { unmount } = render(wrapChair(mockOrder.id))
+    const { unmount } = render(makeKaylee())
     expect(() => unmount()).not.toThrow()
     expect(mockStart).not.toHaveBeenCalled()
   })

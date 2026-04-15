@@ -1,22 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { OrderDetail } from '@/pages/OrderDetail'
+import { FloorWalk } from '@/pages/FloorWalk'
 import { useOrder } from '@/hooks/use_order'
-import { useOrderItems } from '@/hooks/use_order_items'
-import { useSubmitOrder, useArchiveOrder } from '@/hooks/use_order_mutations'
-import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
+import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
+import { api } from '@/lib/api'
 import type { Order } from '@/types/order'
-import type { OrderItem } from '@/types/order_item'
+import type { ChairSku } from '@/lib/chairSandboxMock'
 
 vi.mock('@/hooks/use_order', () => ({ useOrder: vi.fn() }))
-vi.mock('@/hooks/use_order_items', () => ({ useOrderItems: vi.fn() }))
-vi.mock('@/hooks/use_order_mutations', () => ({
-  useSubmitOrder: vi.fn(),
-  useArchiveOrder: vi.fn(),
+vi.mock('@/hooks/use_vendor_catalog', () => ({ useVendorCatalog: vi.fn() }))
+vi.mock('@/lib/api', () => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }))
-vi.mock('@/hooks/use_patch_order_item', () => ({ usePatchOrderItem: vi.fn() }))
 
 const mockOrder: Order = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -29,43 +26,46 @@ const mockOrder: Order = {
   created_at: '2026-04-12T00:00:00Z',
 }
 
-const itemA: OrderItem = {
-  id: '00000000-0000-0000-0000-000000000010',
-  order_id: mockOrder.id,
-  item_id: 'SKU-001',
-  item_name: 'Bark Biscuits',
-  category: null,
-  current_stock_qty: 0,
-  velocity_tier: null,
-  must_have: false,
-  final_qty: 3,
-  ghost_qty: null,
-  confidence_tier: null,
-}
-
-const itemB: OrderItem = {
-  id: '00000000-0000-0000-0000-000000000011',
-  order_id: mockOrder.id,
-  item_id: 'SKU-002',
-  item_name: 'Dog Food 24lb',
-  category: null,
-  current_stock_qty: 5,
-  velocity_tier: null,
-  must_have: false,
-  final_qty: 0,
-  ghost_qty: null,
-  confidence_tier: null,
-}
+const catalogSkus: ChairSku[] = [
+  {
+    id: 'SKU-001',
+    upc: '000000000001',
+    name: 'Bark Biscuits',
+    tab: 'core',
+    category: 'snacks',
+    manufacturer: 'Brand A',
+    animal: 'dog',
+    pack: '1',
+    priceCents: 500,
+    velocity: 'fast',
+    qoh: 0,
+    reorderStatus: 'SMART_ORDER',
+    doNotReorder: false,
+  },
+  {
+    id: 'SKU-002',
+    upc: '000000000002',
+    name: 'Dog Food 24lb',
+    tab: 'core',
+    category: 'food',
+    manufacturer: 'Brand B',
+    animal: 'dog',
+    pack: '1',
+    priceCents: 2000,
+    velocity: 'slow',
+    qoh: 5,
+    reorderStatus: 'SMART_ORDER',
+    doNotReorder: false,
+  },
+]
 
 function wrapper(id: string) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/orders/${id}?tab=floorwalk`]}>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[`/orders/${id}/floor-walk`]}>
         <Routes>
-          <Route path="/orders/:id" element={<OrderDetail />} />
+          <Route path="/orders/:id/floor-walk" element={<FloorWalk />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -73,8 +73,6 @@ function wrapper(id: string) {
 }
 
 describe('Floor Walk Search & Qty Controls', () => {
-  const mockPatch = vi.fn()
-
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useOrder).mockReturnValue({
@@ -82,40 +80,36 @@ describe('Floor Walk Search & Qty Controls', () => {
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useOrder>)
-    vi.mocked(useSubmitOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useSubmitOrder>)
-    vi.mocked(useArchiveOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useArchiveOrder>)
-    vi.mocked(usePatchOrderItem).mockReturnValue({
-      mutate: mockPatch,
-      isPending: false,
-    } as unknown as ReturnType<typeof usePatchOrderItem>)
-    vi.mocked(useOrderItems).mockReturnValue({
-      data: [itemA, itemB],
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: catalogSkus,
       isLoading: false,
+      isError: false,
       error: null,
-    } as unknown as ReturnType<typeof useOrderItems>)
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    vi.mocked(api.get).mockResolvedValue({ data: [] })
+    vi.mocked(api.post).mockResolvedValue({ data: {} })
+    vi.mocked(api.put).mockResolvedValue({ data: {} })
   })
 
-  it('renders search bar', () => {
+  it('renders search bar', async () => {
     render(wrapper(mockOrder.id))
-    expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument())
   })
 
-  it('filters items by search text', () => {
+  it('filters items by search text', async () => {
     render(wrapper(mockOrder.id))
+    await waitFor(() => expect(screen.getByText('Bark Biscuits')).toBeInTheDocument())
+
     const searchInput = screen.getByPlaceholderText(/search/i)
     fireEvent.change(searchInput, { target: { value: 'bark' } })
     expect(screen.getByText('Bark Biscuits')).toBeInTheDocument()
     expect(screen.queryByText('Dog Food 24lb')).not.toBeInTheDocument()
   })
 
-  it('shows all items when search is cleared', () => {
+  it('shows all items when search is cleared', async () => {
     render(wrapper(mockOrder.id))
+    await waitFor(() => expect(screen.getByText('Bark Biscuits')).toBeInTheDocument())
+
     const searchInput = screen.getByPlaceholderText(/search/i)
     fireEvent.change(searchInput, { target: { value: 'bark' } })
     fireEvent.change(searchInput, { target: { value: '' } })
@@ -123,44 +117,45 @@ describe('Floor Walk Search & Qty Controls', () => {
     expect(screen.getByText('Dog Food 24lb')).toBeInTheDocument()
   })
 
-  it('increment + button fires mutation with final_qty + 1', () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  it('increment + button increases qty from 0 to 1', async () => {
     render(wrapper(mockOrder.id))
-    // Bark Biscuits has final_qty=3, click + button
-    const plusButtons = screen.getAllByRole('button', { name: /\+/ })
-    fireEvent.click(plusButtons[0])
-    act(() => { vi.advanceTimersByTime(350) })
-    expect(mockPatch).toHaveBeenCalledWith({
-      orderId: mockOrder.id,
-      itemId: itemA.id,
-      final_qty: 4,
-    })
-    vi.useRealTimers()
+    await waitFor(() => expect(screen.getByText('Bark Biscuits')).toBeInTheDocument())
+
+    const row = screen.getByText('Bark Biscuits').closest('tr')
+    expect(row).not.toBeNull()
+
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-001/i }))
+
+    const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+    expect(qtyInput.value).toBe('1')
   })
 
-  it('decrement - button fires mutation with final_qty - 1', () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  it('decrement - button decreases qty', async () => {
     render(wrapper(mockOrder.id))
-    const minusButtons = screen.getAllByRole('button', { name: /-/ })
-    fireEvent.click(minusButtons[0])
-    act(() => { vi.advanceTimersByTime(350) })
-    expect(mockPatch).toHaveBeenCalledWith({
-      orderId: mockOrder.id,
-      itemId: itemA.id,
-      final_qty: 2,
-    })
-    vi.useRealTimers()
+    await waitFor(() => expect(screen.getByText('Bark Biscuits')).toBeInTheDocument())
+
+    const row = screen.getByText('Bark Biscuits').closest('tr')
+    expect(row).not.toBeNull()
+
+    // First increment to 1 so we have something to decrement
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-001/i }))
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /decrease sku-001/i }))
+
+    const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+    expect(qtyInput.value).toBe('0')
   })
 
-  it('cannot decrement below 0', () => {
+  it('cannot decrement below 0', async () => {
     render(wrapper(mockOrder.id))
-    // Dog Food has final_qty=0, decrement should not fire
-    const minusButtons = screen.getAllByRole('button', { name: /-/ })
-    fireEvent.click(minusButtons[1])
-    // mockPatch should not have been called for qty 0
-    const calls = mockPatch.mock.calls.filter(
-      (call) => call[0].itemId === itemB.id
-    )
-    expect(calls.length).toBe(0)
+    await waitFor(() => expect(screen.getByText('Bark Biscuits')).toBeInTheDocument())
+
+    const row = screen.getByText('Bark Biscuits').closest('tr')
+    expect(row).not.toBeNull()
+
+    // Qty starts at 0 — decrement should stay at 0
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /decrease sku-001/i }))
+
+    const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+    expect(qtyInput.value).toBe('0')
   })
 })
