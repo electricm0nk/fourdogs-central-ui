@@ -32,6 +32,9 @@ import { useOrder } from '@/hooks/use_order'
 type CatalogTab = CatalogTabKey
 type ScanMode = 'add' | 'remove'
 
+const TABLE_ROW_HEIGHT_PX = 56
+const TABLE_OVERSCAN_ROWS = 10
+
 interface OrderLine {
   skuId: string
   quantity: number
@@ -87,7 +90,10 @@ export function FloorWalk() {
   const [uiMode, setUiMode] = useState<UiMode>(() => readUiMode())
 
   const scanInputRef = useRef<HTMLInputElement | null>(null)
+  const tableViewportRef = useRef<HTMLDivElement | null>(null)
   const hydratedFromServerRef = useRef(false)
+  const [tableScrollTop, setTableScrollTop] = useState(0)
+  const [tableViewportHeight, setTableViewportHeight] = useState(600)
 
   useEffect(() => {
     scanInputRef.current?.focus()
@@ -98,6 +104,17 @@ export function FloorWalk() {
       window.localStorage.setItem('fd-ui-mode', uiMode)
     }
   }, [uiMode])
+
+  useEffect(() => {
+    function updateViewportHeight() {
+      if (!tableViewportRef.current) return
+      setTableViewportHeight(tableViewportRef.current.clientHeight)
+    }
+
+    updateViewportHeight()
+    window.addEventListener('resize', updateViewportHeight)
+    return () => window.removeEventListener('resize', updateViewportHeight)
+  }, [])
 
   useEffect(() => {
     hydratedFromServerRef.current = false
@@ -220,6 +237,42 @@ export function FloorWalk() {
     () => Array.from(new Set(sourceSkus.map((sku) => sku.manufacturer?.trim()).filter((brand): brand is string => Boolean(brand)))).sort((a, b) => a.localeCompare(b)),
     [sourceSkus],
   )
+
+  const visibleRange = useMemo(() => {
+    const total = filteredSkus.length
+    const startIndex = Math.max(0, Math.floor(tableScrollTop / TABLE_ROW_HEIGHT_PX) - TABLE_OVERSCAN_ROWS)
+    const endIndex = Math.min(
+      total,
+      Math.ceil((tableScrollTop + tableViewportHeight) / TABLE_ROW_HEIGHT_PX) + TABLE_OVERSCAN_ROWS,
+    )
+
+    return {
+      startIndex,
+      endIndex,
+      topSpacerHeight: startIndex * TABLE_ROW_HEIGHT_PX,
+      bottomSpacerHeight: Math.max(0, (total - endIndex) * TABLE_ROW_HEIGHT_PX),
+      rows: filteredSkus.slice(startIndex, endIndex),
+    }
+  }, [filteredSkus, tableScrollTop, tableViewportHeight])
+
+  useEffect(() => {
+    setTableScrollTop(0)
+    tableViewportRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+  }, [
+    activeTab,
+    animal,
+    query,
+    hideTabs,
+    hideZeroQty,
+    onlyZeroQoh,
+    only111,
+    hideDoNotReorder,
+    frozenBrand,
+    foodBrand,
+    treatsBrand,
+    toysBrand,
+    everythingElseBrand,
+  ])
 
   const budgetDisplay =
     typeof order?.budget_cents === 'number'
@@ -572,7 +625,14 @@ export function FloorWalk() {
               </span>
             </div>
 
-            <div className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
+            <div
+              ref={tableViewportRef}
+              onScroll={(event) => {
+                setTableScrollTop(event.currentTarget.scrollTop)
+                setTableViewportHeight(event.currentTarget.clientHeight)
+              }}
+              className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}
+            >
               <table className="w-full min-w-[980px] border-collapse text-xs">
                 <thead className={cn('sticky top-0 z-10', getTableHeaderClass(uiMode))}>
                   <tr>
@@ -586,12 +646,21 @@ export function FloorWalk() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSkus.map((sku) => {
+                  {visibleRange.topSpacerHeight > 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ height: visibleRange.topSpacerHeight }} />
+                    </tr>
+                  )}
+                  {visibleRange.rows.map((sku) => {
                     const qty = qtyBySku.get(sku.id) ?? 0
                     const lineTotal = qty * sku.priceCents
                     const isPriority = prioritySkuIds.has(sku.id)
                     return (
-                      <tr key={sku.id} className={cn(getTableRowBaseClass(uiMode), getTableAltRowClass(uiMode), isPriority && getPriorityRowClass(uiMode))}>
+                      <tr
+                        key={sku.id}
+                        style={{ height: TABLE_ROW_HEIGHT_PX }}
+                        className={cn(getTableRowBaseClass(uiMode), getTableAltRowClass(uiMode), isPriority && getPriorityRowClass(uiMode))}
+                      >
                         <td className="px-2 py-1">{sku.name}</td>
                         <td className="px-2 py-1">{sku.pack}</td>
                         <td className="px-2 py-1 text-right">{sku.qoh}</td>
@@ -634,6 +703,11 @@ export function FloorWalk() {
                       </tr>
                     )
                   })}
+                  {visibleRange.bottomSpacerHeight > 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ height: visibleRange.bottomSpacerHeight }} />
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

@@ -39,6 +39,9 @@ import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type Catalo
 
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
+const TABLE_ROW_HEIGHT_PX = 56
+const TABLE_OVERSCAN_ROWS = 10
+
 interface ChatMessage {
   id: string
   role: 'operator' | 'kaylee'
@@ -113,6 +116,9 @@ export function OrderDetail() {
   const [streamStatus, setStreamStatus] = useState<StreamStatus>('idle')
   const [kayleeError, setKayleeError] = useState('')
   const [draft, setDraft] = useState('')
+  const worksheetViewportRef = useRef<HTMLDivElement | null>(null)
+  const [worksheetScrollTop, setWorksheetScrollTop] = useState(0)
+  const [worksheetViewportHeight, setWorksheetViewportHeight] = useState(600)
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'intro',
@@ -143,6 +149,17 @@ export function OrderDetail() {
       window.localStorage.setItem('fd-ui-mode', uiMode)
     }
   }, [uiMode])
+
+  useEffect(() => {
+    function updateViewportHeight() {
+      if (!worksheetViewportRef.current) return
+      setWorksheetViewportHeight(worksheetViewportRef.current.clientHeight)
+    }
+
+    updateViewportHeight()
+    window.addEventListener('resize', updateViewportHeight)
+    return () => window.removeEventListener('resize', updateViewportHeight)
+  }, [])
 
   const skuMap = useMemo(() => new Map(sourceSkus.map((sku) => [sku.id, sku])), [sourceSkus])
 
@@ -274,6 +291,43 @@ export function OrderDetail() {
       return tabMatch && brandMatch && animalMatch && queryMatch && zeroMatch && zeroQohMatch && only111Match && doNotReorderMatch && signalMatch
     }).sort(compareSkuByNameAndSize)
   }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand, importedSkuIds, selectedSignalFilters])
+
+  const visibleWorksheetRange = useMemo(() => {
+    const total = filteredCatalog.length
+    const startIndex = Math.max(0, Math.floor(worksheetScrollTop / TABLE_ROW_HEIGHT_PX) - TABLE_OVERSCAN_ROWS)
+    const endIndex = Math.min(
+      total,
+      Math.ceil((worksheetScrollTop + worksheetViewportHeight) / TABLE_ROW_HEIGHT_PX) + TABLE_OVERSCAN_ROWS,
+    )
+
+    return {
+      startIndex,
+      endIndex,
+      topSpacerHeight: startIndex * TABLE_ROW_HEIGHT_PX,
+      bottomSpacerHeight: Math.max(0, (total - endIndex) * TABLE_ROW_HEIGHT_PX),
+      rows: filteredCatalog.slice(startIndex, endIndex),
+    }
+  }, [filteredCatalog, worksheetScrollTop, worksheetViewportHeight])
+
+  useEffect(() => {
+    setWorksheetScrollTop(0)
+    worksheetViewportRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+  }, [
+    activeTab,
+    animal,
+    wsQuery,
+    hideTabs,
+    hideZeroQty,
+    onlyZeroQoh,
+    only111,
+    hideDoNotReorder,
+    frozenBrand,
+    foodBrand,
+    treatsBrand,
+    toysBrand,
+    everythingElseBrand,
+    selectedSignalFilters,
+  ])
 
   function toggleSignalFilter(filter: SignalFilterKey) {
     setSelectedSignalFilters((prev) => (prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]))
@@ -873,7 +927,14 @@ export function OrderDetail() {
             </button>
           </div>
 
-          <div className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
+          <div
+            ref={worksheetViewportRef}
+            onScroll={(event) => {
+              setWorksheetScrollTop(event.currentTarget.scrollTop)
+              setWorksheetViewportHeight(event.currentTarget.clientHeight)
+            }}
+            className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}
+          >
             <table className="w-full min-w-[980px] border-collapse text-xs">
               <thead className={cn('sticky top-0 z-10', getTableHeaderClass(uiMode))}>
                 <tr>
@@ -888,7 +949,12 @@ export function OrderDetail() {
                 </tr>
               </thead>
               <tbody>
-                {filteredCatalog.map((sku) => {
+                {visibleWorksheetRange.topSpacerHeight > 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ height: visibleWorksheetRange.topSpacerHeight }} />
+                  </tr>
+                )}
+                {visibleWorksheetRange.rows.map((sku) => {
                   const qty = qtyBySku.get(sku.id) ?? 0
                   const isLocked = lockedBySku.get(sku.id) ?? false
                   const lineTotal = sku.priceCents * qty
@@ -896,7 +962,11 @@ export function OrderDetail() {
                   const isPriority = importedSkuIds.has(sku.id)
 
                   return (
-                    <tr key={sku.id} className={cn(getTableRowBaseClass(uiMode), getTableAltRowClass(uiMode), isPriority && getPriorityRowClass(uiMode))}>
+                    <tr
+                      key={sku.id}
+                      style={{ height: TABLE_ROW_HEIGHT_PX }}
+                      className={cn(getTableRowBaseClass(uiMode), getTableAltRowClass(uiMode), isPriority && getPriorityRowClass(uiMode))}
+                    >
                       <td className="px-2 py-1">
                         <input
                           type="checkbox"
@@ -958,6 +1028,11 @@ export function OrderDetail() {
                     </tr>
                   )
                 })}
+                {visibleWorksheetRange.bottomSpacerHeight > 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ height: visibleWorksheetRange.bottomSpacerHeight }} />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
