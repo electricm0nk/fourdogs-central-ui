@@ -1,42 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { OrderDetail } from '@/pages/OrderDetail'
-import { useOrder } from '@/hooks/use_order'
+import { OrderingGrid } from '@/components/OrderingGrid'
 import { useOrderItems } from '@/hooks/use_order_items'
-import { useSubmitOrder, useArchiveOrder } from '@/hooks/use_order_mutations'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
-import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
 import { useLogLearning } from '@/hooks/use_log_learning'
 import { resolveActionType } from '@/lib/resolve_action_type'
-import type { Order } from '@/types/order'
 import type { OrderItem } from '@/types/order_item'
 
-vi.mock('@/hooks/use_order', () => ({ useOrder: vi.fn() }))
 vi.mock('@/hooks/use_order_items', () => ({ useOrderItems: vi.fn() }))
-vi.mock('@/hooks/use_order_mutations', () => ({
-  useSubmitOrder: vi.fn(),
-  useArchiveOrder: vi.fn(),
-}))
 vi.mock('@/hooks/use_patch_order_item', () => ({ usePatchOrderItem: vi.fn() }))
-vi.mock('@/hooks/use_kaylee_analyze', () => ({ useKayleeAnalyze: vi.fn() }))
 vi.mock('@/hooks/use_log_learning', () => ({ useLogLearning: vi.fn() }))
 
-const mockOrder: Order = {
-  id: '00000000-0000-0000-0000-000000000001',
-  vendor_adapter_id: '00000000-0000-0000-0000-000000000002',
-  vendor_name: 'Southeast Pet',
-  created_by: 'test-sub',
-  order_date: '2026-04-12',
-  submitted: false,
-  archived: false,
-  created_at: '2026-04-12T00:00:00Z',
-}
+const ORDER_ID = '00000000-0000-0000-0000-000000000001'
 
 const itemWithGhostQty: OrderItem = {
   id: '00000000-0000-0000-0000-000000000011',
-  order_id: mockOrder.id,
+  order_id: ORDER_ID,
   item_id: 'SKU-002',
   item_name: 'Dog Food 24lb',
   category: 'food',
@@ -56,17 +36,11 @@ const tier1Item: OrderItem = {
   confidence_tier: 1,
 }
 
-function wrapChair(id: string) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
+function makeGrid() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/orders/${id}?tab=chair`]}>
-        <Routes>
-          <Route path="/orders/:id" element={<OrderDetail />} />
-        </Routes>
-      </MemoryRouter>
+    <QueryClientProvider client={qc}>
+      <OrderingGrid orderId={ORDER_ID} isEditable={true} />
     </QueryClientProvider>
   )
 }
@@ -103,41 +77,10 @@ describe('OrderingGrid — learning event integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: (query: string) => ({
-        matches: query.includes('1280'),
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }),
-    })
-    vi.mocked(useOrder).mockReturnValue({
-      data: mockOrder,
-      isLoading: false,
-      error: null,
-    } as unknown as ReturnType<typeof useOrder>)
-    vi.mocked(useSubmitOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useSubmitOrder>)
-    vi.mocked(useArchiveOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useArchiveOrder>)
     vi.mocked(usePatchOrderItem).mockReturnValue({
       mutate: mockPatch,
       isPending: false,
     } as unknown as ReturnType<typeof usePatchOrderItem>)
-    vi.mocked(useKayleeAnalyze).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useKayleeAnalyze>)
     vi.mocked(useLogLearning).mockReturnValue(mockLog)
   })
 
@@ -148,7 +91,7 @@ describe('OrderingGrid — learning event integration', () => {
       error: null,
     } as unknown as ReturnType<typeof useOrderItems>)
 
-    render(wrapChair(mockOrder.id))
+    render(makeGrid())
 
     fireEvent.click(screen.getByRole('button', { name: /edit quantity/i }))
     const input = screen.getByRole('spinbutton')
@@ -156,7 +99,7 @@ describe('OrderingGrid — learning event integration', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
 
     expect(mockLog).toHaveBeenCalledWith({
-      orderId: mockOrder.id,
+      orderId: ORDER_ID,
       itemSku: 'SKU-002',
       actionType: 'reject_ghost',
       kayleeRecQty: 5,
@@ -172,7 +115,7 @@ describe('OrderingGrid — learning event integration', () => {
       error: null,
     } as unknown as ReturnType<typeof useOrderItems>)
 
-    render(wrapChair(mockOrder.id))
+    render(makeGrid())
 
     fireEvent.click(screen.getByRole('button', { name: /edit quantity/i }))
     const input = screen.getByRole('spinbutton')
@@ -191,7 +134,7 @@ describe('OrderingGrid — learning event integration', () => {
       error: null,
     } as unknown as ReturnType<typeof useOrderItems>)
 
-    render(wrapChair(mockOrder.id))
+    render(makeGrid())
 
     fireEvent.click(screen.getByRole('button', { name: /edit quantity/i }))
     const input = screen.getByRole('spinbutton')

@@ -1,4 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useParams, useNavigate } from 'react-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
@@ -68,6 +70,7 @@ interface WorksheetLineItem {
   skuId: string
   quantity: number
   locked: boolean
+  kayleeQty?: number
 }
 
 function formatOrderDate(dateStr: string): string {
@@ -240,6 +243,20 @@ export function OrderDetail() {
     [lineItems],
   )
 
+  const kayleeQtyBySku = useMemo(
+    () => new Map(lineItems.filter((l) => l.kayleeQty !== undefined).map((l) => [l.skuId, l.kayleeQty as number])),
+    [lineItems],
+  )
+
+  function resolveSkuTier(qty: number, kayleeQty: number | undefined): 1 | 2 | 3 | 4 {
+    if (kayleeQty !== undefined) {
+      if (qty > kayleeQty) return 1
+      if (qty === kayleeQty) return 2
+      return 3
+    }
+    return getQtyConfidenceTier(qty)
+  }
+
   const tabOptions = useMemo(() => buildCatalogTabs(sourceSkus), [sourceSkus])
   const frozenBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'frozen'), [sourceSkus])
   const foodBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'food'), [sourceSkus])
@@ -277,7 +294,7 @@ export function OrderDetail() {
       const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
       const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
       const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
-      const tier = getQtyConfidenceTier(qty)
+      const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id))
       const isPriority = importedSkuIds.has(sku.id)
       const signalMatch = selectedSignalFilters.every((filter) => {
         if (filter === 'hot') return sku.velocity === 'fast'
@@ -290,7 +307,7 @@ export function OrderDetail() {
 
       return tabMatch && brandMatch && animalMatch && queryMatch && zeroMatch && zeroQohMatch && only111Match && doNotReorderMatch && signalMatch
     }).sort(compareSkuByNameAndSize)
-  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand, importedSkuIds, selectedSignalFilters])
+  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku, kayleeQtyBySku, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand, importedSkuIds, selectedSignalFilters])
 
   const visibleWorksheetRange = useMemo(() => {
     const total = filteredCatalog.length
@@ -372,7 +389,7 @@ export function OrderDetail() {
       const existing = new Map(prev.map((l) => [l.skuId, l]))
       for (const pick of picks) {
         if (!existing.has(pick.skuId)) {
-          existing.set(pick.skuId, { skuId: pick.skuId, quantity: pick.quantity, locked: false })
+          existing.set(pick.skuId, { skuId: pick.skuId, quantity: pick.quantity, locked: false, kayleeQty: pick.quantity })
         }
       }
       return Array.from(existing.values())
@@ -640,7 +657,7 @@ export function OrderDetail() {
               <Button
                 disabled={isPending}
                 className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
-                onClick={() => submitOrder({ id: order.id, submitted: true }, { onSuccess: () => navigate('/') })}
+                onClick={() => navigate('/')}
               >
                 Return to Orders
               </Button>
@@ -958,7 +975,7 @@ export function OrderDetail() {
                   const qty = qtyBySku.get(sku.id) ?? 0
                   const isLocked = lockedBySku.get(sku.id) ?? false
                   const lineTotal = sku.priceCents * qty
-                  const tier = getQtyConfidenceTier(qty)
+                  const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id))
                   const isPriority = importedSkuIds.has(sku.id)
 
                   return (
@@ -1105,7 +1122,27 @@ export function OrderDetail() {
                     : getKayleeBubbleClass(uiMode),
                 )}
               >
-                {message.text || (streamStatus === 'streaming' && message.role === 'kaylee' ? '...' : '')}
+                {message.role === 'kaylee' ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      table: ({ children }) => (
+                        <table className="my-1 w-full border-collapse text-xs">{children}</table>
+                      ),
+                      th: ({ children }) => (
+                        <th className="border border-amber-300 bg-amber-100 px-2 py-1 text-left font-semibold">{children}</th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="border border-amber-200 px-2 py-1">{children}</td>
+                      ),
+                      p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                    }}
+                  >
+                    {message.text || (streamStatus === 'streaming' ? '...' : '')}
+                  </ReactMarkdown>
+                ) : (
+                  message.text
+                )}
               </div>
             ))}
             <div ref={chatBottomRef} />

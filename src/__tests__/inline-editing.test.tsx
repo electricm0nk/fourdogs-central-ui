@@ -1,44 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { OrderDetail } from '@/pages/OrderDetail'
-import { useOrder } from '@/hooks/use_order'
+import { OrderingGrid } from '@/components/OrderingGrid'
 import { useOrderItems } from '@/hooks/use_order_items'
-import { useSubmitOrder, useArchiveOrder } from '@/hooks/use_order_mutations'
 import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
-import { useKayleeAnalyze } from '@/hooks/use_kaylee_analyze'
-import type { Order } from '@/types/order'
+import { useLogLearning } from '@/hooks/use_log_learning'
 import type { OrderItem } from '@/types/order_item'
 
-vi.mock('@/hooks/use_order', () => ({ useOrder: vi.fn() }))
 vi.mock('@/hooks/use_order_items', () => ({ useOrderItems: vi.fn() }))
-vi.mock('@/hooks/use_order_mutations', () => ({
-  useSubmitOrder: vi.fn(),
-  useArchiveOrder: vi.fn(),
-}))
 vi.mock('@/hooks/use_patch_order_item', () => ({ usePatchOrderItem: vi.fn() }))
-vi.mock('@/hooks/use_kaylee_analyze', () => ({ useKayleeAnalyze: vi.fn() }))
+vi.mock('@/hooks/use_log_learning', () => ({ useLogLearning: vi.fn() }))
 
-const mockOrder: Order = {
-  id: '00000000-0000-0000-0000-000000000001',
-  vendor_adapter_id: '00000000-0000-0000-0000-000000000002',
-  vendor_name: 'Southeast Pet',
-  created_by: 'test-sub',
-  order_date: '2026-04-12',
-  submitted: false,
-  archived: false,
-  created_at: '2026-04-12T00:00:00Z',
-}
-
-const submittedOrder: Order = {
-  ...mockOrder,
-  submitted: true,
-}
+const ORDER_ID = '00000000-0000-0000-0000-000000000001'
 
 const editableItem: OrderItem = {
   id: '00000000-0000-0000-0000-000000000011',
-  order_id: mockOrder.id,
+  order_id: ORDER_ID,
   item_id: 'SKU-002',
   item_name: 'Dog Food 24lb',
   category: 'food',
@@ -50,17 +27,11 @@ const editableItem: OrderItem = {
   confidence_tier: 1,
 }
 
-function wrapChair(id: string) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
+function makeGrid(isEditable: boolean) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/orders/${id}?tab=chair`]}>
-        <Routes>
-          <Route path="/orders/:id" element={<OrderDetail />} />
-        </Routes>
-      </MemoryRouter>
+    <QueryClientProvider client={qc}>
+      <OrderingGrid orderId={ORDER_ID} isEditable={isEditable} />
     </QueryClientProvider>
   )
 }
@@ -70,41 +41,11 @@ describe('OrderingGrid — Inline Qty Editing', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: (query: string) => ({
-        matches: query.includes('1280'),
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }),
-    })
-    vi.mocked(useOrder).mockReturnValue({
-      data: mockOrder,
-      isLoading: false,
-      error: null,
-    } as unknown as ReturnType<typeof useOrder>)
-    vi.mocked(useSubmitOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useSubmitOrder>)
-    vi.mocked(useArchiveOrder).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    } as unknown as ReturnType<typeof useArchiveOrder>)
     vi.mocked(usePatchOrderItem).mockReturnValue({
       mutate: mockPatch,
       isPending: false,
     } as unknown as ReturnType<typeof usePatchOrderItem>)
-    vi.mocked(useKayleeAnalyze).mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: false,
-    } as unknown as ReturnType<typeof useKayleeAnalyze>)
+    vi.mocked(useLogLearning).mockReturnValue(vi.fn())
     vi.mocked(useOrderItems).mockReturnValue({
       data: [editableItem],
       isLoading: false,
@@ -113,7 +54,7 @@ describe('OrderingGrid — Inline Qty Editing', () => {
   })
 
   it('clicking the final_qty cell enters edit mode and shows an input', () => {
-    render(wrapChair(mockOrder.id))
+    render(makeGrid(true))
 
     const editBtn = screen.getByRole('button', { name: /edit quantity/i })
     fireEvent.click(editBtn)
@@ -122,7 +63,7 @@ describe('OrderingGrid — Inline Qty Editing', () => {
   })
 
   it('Enter commits the new value and fires PATCH', () => {
-    render(wrapChair(mockOrder.id))
+    render(makeGrid(true))
 
     fireEvent.click(screen.getByRole('button', { name: /edit quantity/i }))
     const input = screen.getByRole('spinbutton')
@@ -130,7 +71,7 @@ describe('OrderingGrid — Inline Qty Editing', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
 
     expect(mockPatch).toHaveBeenCalledWith({
-      orderId: mockOrder.id,
+      orderId: ORDER_ID,
       itemId: editableItem.id,
       final_qty: 7,
     })
@@ -138,7 +79,7 @@ describe('OrderingGrid — Inline Qty Editing', () => {
   })
 
   it('Escape reverts without firing PATCH', () => {
-    render(wrapChair(mockOrder.id))
+    render(makeGrid(true))
 
     fireEvent.click(screen.getByRole('button', { name: /edit quantity/i }))
     const input = screen.getByRole('spinbutton')
@@ -147,12 +88,11 @@ describe('OrderingGrid — Inline Qty Editing', () => {
 
     expect(mockPatch).not.toHaveBeenCalled()
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
-    // original value still displayed
     expect(screen.getByRole('button', { name: /edit quantity/i })).toHaveTextContent('4')
   })
 
   it('Tab commits the new value and fires PATCH', () => {
-    render(wrapChair(mockOrder.id))
+    render(makeGrid(true))
 
     fireEvent.click(screen.getByRole('button', { name: /edit quantity/i }))
     const input = screen.getByRole('spinbutton')
@@ -160,14 +100,14 @@ describe('OrderingGrid — Inline Qty Editing', () => {
     fireEvent.keyDown(input, { key: 'Tab', code: 'Tab' })
 
     expect(mockPatch).toHaveBeenCalledWith({
-      orderId: mockOrder.id,
+      orderId: ORDER_ID,
       itemId: editableItem.id,
       final_qty: 5,
     })
   })
 
   it('blur commits the new value and fires PATCH', () => {
-    render(wrapChair(mockOrder.id))
+    render(makeGrid(true))
 
     fireEvent.click(screen.getByRole('button', { name: /edit quantity/i }))
     const input = screen.getByRole('spinbutton')
@@ -175,7 +115,7 @@ describe('OrderingGrid — Inline Qty Editing', () => {
     fireEvent.blur(input)
 
     expect(mockPatch).toHaveBeenCalledWith({
-      orderId: mockOrder.id,
+      orderId: ORDER_ID,
       itemId: editableItem.id,
       final_qty: 6,
     })
@@ -183,16 +123,9 @@ describe('OrderingGrid — Inline Qty Editing', () => {
   })
 
   it('submitted order renders final_qty as plain text — no edit button', () => {
-    vi.mocked(useOrder).mockReturnValue({
-      data: submittedOrder,
-      isLoading: false,
-      error: null,
-    } as unknown as ReturnType<typeof useOrder>)
-
-    render(wrapChair(mockOrder.id))
+    render(makeGrid(false))
 
     expect(screen.queryByRole('button', { name: /edit quantity/i })).not.toBeInTheDocument()
-    // value still visible as text
     const grid = document.querySelector('[data-testid="ordering-grid"]')
     expect(grid).toHaveTextContent('4')
   })
