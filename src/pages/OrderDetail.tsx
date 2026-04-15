@@ -386,18 +386,19 @@ export function OrderDetail() {
     const targetCents = Math.floor(budget * (recBudgetPct / 100))
     const treatShare = recTreatsPct / 100
     const velocityRank: Record<string, number> = { fast: 0, medium: 1, slow: 2 }
-    const suggestedQty = (v: string) => (v === 'fast' ? 4 : v === 'medium' ? 2 : 1)
-    const sorted = [...sourceSkus].sort((a, b) => {
-      const vd = (velocityRank[a.velocity] ?? 2) - (velocityRank[b.velocity] ?? 2)
-      return vd !== 0 ? vd : a.name.localeCompare(b.name)
-    })
+    const sorted = [...sourceSkus]
+      .filter((sku) => sku.suggestedQty && sku.suggestedQty > 0)
+      .sort((a, b) => {
+        const vd = (velocityRank[a.velocity] ?? 2) - (velocityRank[b.velocity] ?? 2)
+        return vd !== 0 ? vd : a.name.localeCompare(b.name)
+      })
     const treatBudget = Math.floor(targetCents * treatShare)
     const mainBudget = targetCents - treatBudget
     const picks: Array<{ skuId: string; quantity: number }> = []
     let spentMain = 0
     let spentTreats = 0
     for (const sku of sorted) {
-      const qty = suggestedQty(sku.velocity)
+      const qty = sku.suggestedQty!
       const cost = sku.priceCents * qty
       if (sku.tab === 'treats') {
         if (spentTreats + cost <= treatBudget) { picks.push({ skuId: sku.id, quantity: qty }); spentTreats += cost }

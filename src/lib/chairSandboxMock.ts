@@ -20,6 +20,7 @@ export interface ChairSku {
   priceCents: number
   velocity: 'fast' | 'medium' | 'slow'
   qoh: number
+  suggestedQty?: number
   reorderStatus?: string
   doNotReorder?: boolean
 }
