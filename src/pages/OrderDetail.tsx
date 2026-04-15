@@ -1,293 +1,579 @@
-import { useRef, useState } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams, useNavigate } from 'react-router'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ConnectivityBadge } from '@/components/ConnectivityBadge'
-import { KayleePanel } from '@/components/KayleePanel'
-import { OrderingGrid } from '@/components/OrderingGrid'
+import { cn } from '@/lib/utils'
+import type { AnimalFilter } from '@/lib/chairSandboxMock'
+import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
+import {
+  compareSkuByNameAndSize,
+  getActiveToggleBtnClass,
+  getChatBgClass,
+  getFooterClass,
+  getHotBadgeClass,
+  getInactiveToggleBtnClass,
+  getInputClass,
+  getKayleeBubbleClass,
+  getMutedTextClass,
+  getOperatorBubbleClass,
+  getPageClass,
+  getPrototypeSignalLabel,
+  getPriorityBadgeClass,
+  getPriorityRowClass,
+  getQtyConfidenceTier,
+  getSectionClass,
+  getSignalBadgeClass,
+  getTableAltRowClass,
+  getTableHeaderClass,
+  getTableRowBaseClass,
+  getTogglePillClass,
+  readUiMode,
+  type UiMode,
+} from '@/lib/orderGrid'
+import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
-import { useOrderItems } from '@/hooks/use_order_items'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
-import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
-import { useIsWide } from '@/hooks/use_is_wide'
-import type { OrderItem } from '@/types/order_item'
+import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
 
-const DEBOUNCE_MS = 300
+type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
+
+interface ChatMessage {
+  id: string
+  role: 'operator' | 'kaylee'
+  text: string
+}
+
+interface FloorWalkLinePayload {
+  sku_id: string
+  item_upc: string
+  quantity: number
+}
+
+interface SuggestionRecord {
+  request_number: number
+  username: string
+  suggestion: string
+  status: string
+  submitted_at: string
+}
+
+type SignalFilterKey = 'hot' | 'tier-1' | 'tier-2' | 'tier-3' | 'tier-4' | 'priority'
+
+interface WorksheetLineItem {
+  skuId: string
+  quantity: number
+  locked: boolean
+}
 
 function formatOrderDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function ItemSkeleton() {
-  return (
-    <div
-      data-testid="item-skeleton"
-      className="h-12 rounded-md bg-gray-200 animate-pulse"
-    />
-  )
-}
-
-function QtyControl({
-  value,
-  itemId,
-  orderId,
-  mustHave,
-  onPatch,
-}: {
-  value: number
-  itemId: string
-  orderId: string
-  mustHave?: boolean
-  onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
-}) {
-  const [localQty, setLocalQty] = useState(value)
-  const [pendingZero, setPendingZero] = useState(false)
-  const [prevQty, setPrevQty] = useState(value)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function fireDebounced(qty: number) {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      onPatch({ orderId, itemId, final_qty: qty })
-    }, DEBOUNCE_MS)
-  }
-
-  function handleIncrement() {
-    const next = localQty + 1
-    setLocalQty(next)
-    fireDebounced(next)
-  }
-
-  function handleDecrement() {
-    if (localQty <= 0) return
-    const next = localQty - 1
-    if (next === 0 && mustHave) {
-      setPrevQty(localQty)
-      setLocalQty(0)
-      setPendingZero(true)
-      return
-    }
-    setLocalQty(next)
-    fireDebounced(next)
-  }
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = parseInt(e.target.value, 10)
-    if (isNaN(val) || val < 0) return
-    if (val === 0 && mustHave && localQty > 0) {
-      setPrevQty(localQty)
-      setLocalQty(0)
-      setPendingZero(true)
-      return
-    }
-    setLocalQty(val)
-    fireDebounced(val)
-  }
-
-  function confirmZero() {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    setPendingZero(false)
-    onPatch({ orderId, itemId, final_qty: 0 })
-  }
-
-  function cancelZero() {
-    setPendingZero(false)
-    setLocalQty(prevQty)
-  }
-
-  return (
-    <>
-      {pendingZero && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="absolute z-10 rounded-md border bg-white p-3 shadow-lg text-sm space-y-2 w-56"
-        >
-          <p className="font-medium">This is a must-have item. Set to 0?</p>
-          <div className="flex gap-2">
-            <Button size="sm" variant="destructive" onClick={confirmZero}>
-              Yes, set to 0
-            </Button>
-            <Button size="sm" variant="outline" onClick={cancelZero}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-      <div className="flex items-center gap-1">
-        <button
-          className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100 disabled:opacity-40"
-          onClick={handleDecrement}
-          disabled={localQty <= 0}
-          aria-label="-"
-        >
-          −
-        </button>
-        <input
-          type="number"
-          inputMode="numeric"
-          value={localQty}
-          onChange={handleChange}
-          className="w-14 text-center border rounded h-11 text-sm"
-          min={0}
-        />
-        <button
-          className="w-11 h-11 flex items-center justify-center rounded border text-lg font-medium hover:bg-gray-100"
-          onClick={handleIncrement}
-          aria-label="+"
-        >
-          +
-        </button>
-      </div>
-    </>
-  )
-}
-
-function OrderItemRow({
-  item,
-  orderId,
-  onPatch,
-}: {
-  item: OrderItem
-  orderId: string
-  onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
-}) {
-  return (
-    <div
-      className={`relative flex items-center justify-between min-h-[48px] p-3 rounded-md border ${
-        item.must_have ? 'border-amber-400 bg-amber-50' : 'bg-white'
-      }`}
-    >
-      <div className="flex-1">
-        <p className="font-medium text-sm">{item.item_name}</p>
-        <p className="text-xs text-gray-500">SKU: {item.item_id} · Stock: {item.current_stock_qty}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        {item.must_have && (
-          <Badge className="bg-amber-100 text-amber-800 text-xs">Must-Have</Badge>
-        )}
-        <QtyControl
-          value={item.final_qty}
-          itemId={item.id}
-          orderId={orderId}
-          mustHave={item.must_have}
-          onPatch={onPatch}
-        />
-      </div>
-    </div>
-  )
-}
-
-function FloorWalkTab({ orderId }: { orderId: string }) {
-  const [search, setSearch] = useState('')
-  const { data: items, isLoading } = useOrderItems(orderId)
-  const { mutate: patchItem, isPending } = usePatchOrderItem()
-
-  const filtered = items?.filter(
-    (item) =>
-      search === '' ||
-      item.item_name.toLowerCase().includes(search.toLowerCase()) ||
-      item.item_id.toLowerCase().includes(search.toLowerCase())
-  )
-
-  return (
-    <div className="space-y-3">
-      <ConnectivityBadge isSyncing={isPending} />
-
-      <div className="relative">
-        <Input
-          placeholder="Search items…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            onClick={() => setSearch('')}
-            aria-label="Clear search"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
-      {isLoading && (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <ItemSkeleton key={i} />)}
-        </div>
-      )}
-
-      {!isLoading && (!filtered || filtered.length === 0) && (
-        <div className="py-8 text-center text-gray-500">
-          {search ? 'No items match your search.' : 'No items on this order yet. Items are imported when the order is created.'}
-        </div>
-      )}
-
-      {!isLoading && filtered && filtered.length > 0 && (
-        <div className="space-y-2">
-          {filtered.map((item) => (
-            <OrderItemRow
-              key={item.id}
-              item={item}
-              orderId={orderId}
-              onPatch={patchItem}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ChairTab({ orderId, isEditable }: { orderId: string; isEditable: boolean }) {
-  const wide = useIsWide()
-  return wide ? (
-    <div className="grid grid-cols-[1fr_380px] gap-4 h-full">
-      <OrderingGrid orderId={orderId} isEditable={isEditable} />
-      <KayleePanel orderId={orderId} />
-    </div>
-  ) : (
-    <div className="flex flex-col gap-4">
-      <OrderingGrid orderId={orderId} isEditable={isEditable} />
-    </div>
-  )
-}
-
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = searchParams.get('tab') ?? 'floorwalk'
   const { data: order, isLoading } = useOrder(id ?? '')
   const { mutate: submitOrder, isPending } = useSubmitOrder()
 
+  const catalogQuery = useVendorCatalog(order?.vendor_id, order?.vendor_adapter_id)
+  const sourceSkus = catalogQuery.data ?? []
+  const catalogSource = sourceSkus.length > 0 ? 'live' : 'none'
+  const [lineItems, setLineItems] = useState<WorksheetLineItem[]>([])
+  const worksheetEditedRef = useRef(false)
+  const [uiMode, setUiMode] = useState<UiMode>(() => readUiMode())
+
+  // Worksheet filter state
+  const [activeTab, setActiveTab] = useState<CatalogTabKey>('all')
+  const [animal, setAnimal] = useState<AnimalFilter>('all')
+  const [hideTabs, setHideTabs] = useState(false)
+  const [hideZeroQty, setHideZeroQty] = useState(false)
+  const [onlyZeroQoh, setOnlyZeroQoh] = useState(false)
+  const [only111, setOnly111] = useState(false)
+  const [hideDoNotReorder, setHideDoNotReorder] = useState(true)
+  const [frozenBrand, setFrozenBrand] = useState('all')
+  const [foodBrand, setFoodBrand] = useState('all')
+  const [treatsBrand, setTreatsBrand] = useState('all')
+  const [toysBrand, setToysBrand] = useState('all')
+  const [everythingElseBrand, setEverythingElseBrand] = useState('all')
+  const [wsQuery, setWsQuery] = useState('')
+  const [selectedSignalFilters, setSelectedSignalFilters] = useState<SignalFilterKey[]>([])
+  const [selectedSideBrand, setSelectedSideBrand] = useState<string | null>(null)
+  const [leftWingOpen, setLeftWingOpen] = useState(false)
+  const [rightWingOpen, setRightWingOpen] = useState(false)
+  const [suggestionText, setSuggestionText] = useState('')
+
+  // Kaylee recommends panel state
+  const [recBudgetPct, setRecBudgetPct] = useState(50)
+  const [recTreatsPct, setRecTreatsPct] = useState(25)
+  const [recLoading, setRecLoading] = useState(false)
+
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>('idle')
+  const [kayleeError, setKayleeError] = useState('')
+  const [draft, setDraft] = useState('')
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'intro',
+      role: 'kaylee',
+      text: "Hi, I'm Kaylee. Ask me for guidance on this order and I will stream my response.",
+    },
+  ])
+
+  const streamRef = useRef<EventSource | null>(null)
+  const chatBottomRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (chatBottomRef.current && typeof chatBottomRef.current.scrollIntoView === 'function') {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.close()
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('fd-ui-mode', uiMode)
+    }
+  }, [uiMode])
+
+  const skuMap = useMemo(() => new Map(sourceSkus.map((sku) => [sku.id, sku])), [sourceSkus])
+
+  const floorWalkLinesQuery = useQuery({
+    queryKey: ['order-floor-walk-lines', id],
+    queryFn: () => api.get<{ data: FloorWalkLinePayload[] }>(`/v1/orders/${id}/floor-walk-lines`),
+    select: (res) => res.data,
+    enabled: !!id,
+  })
+
+  const suggestionsQuery = useQuery({
+    queryKey: ['suggestions'],
+    queryFn: () => api.get<{ data: SuggestionRecord[] }>('/v1/suggestions'),
+    select: (res) => res.data,
+  })
+
+  const createSuggestion = useMutation({
+    mutationFn: (payload: { suggestion: string }) =>
+      api.post<{ data: SuggestionRecord }>('/v1/suggestions', payload),
+    onSuccess: () => {
+      setSuggestionText('')
+      suggestionsQuery.refetch()
+    },
+  })
+
+
+  useEffect(() => {
+    worksheetEditedRef.current = false
+    setLineItems([])
+  }, [id])
+
+  // Keep worksheet seeded from floor-walk lines until the user edits locally.
+  useEffect(() => {
+    if (!floorWalkLinesQuery.isSuccess) return
+
+    if (worksheetEditedRef.current) return
+
+    const floorWalkItems = (floorWalkLinesQuery.data ?? [])
+      .filter((line) => line.quantity > 0)
+      .map((line) => ({ skuId: line.sku_id, quantity: line.quantity, locked: false }))
+
+    setLineItems(floorWalkItems)
+  }, [floorWalkLinesQuery.isSuccess, floorWalkLinesQuery.data])
+
+  const importedSkuIds = useMemo(
+    () => new Set((floorWalkLinesQuery.data ?? []).filter((line) => line.quantity > 0).map((line) => line.sku_id)),
+    [floorWalkLinesQuery.data],
+  )
+
+  const runningTotalCents = useMemo(
+    () =>
+      lineItems.reduce((sum, item) => {
+        const sku = skuMap.get(item.skuId)
+        if (!sku) return sum
+        return sum + sku.priceCents * item.quantity
+      }, 0),
+    [lineItems, skuMap],
+  )
+
+  const lockedTotalCents = useMemo(
+    () =>
+      lineItems.reduce((sum, item) => {
+        if (!item.locked) return sum
+        const sku = skuMap.get(item.skuId)
+        if (!sku) return sum
+        return sum + sku.priceCents * item.quantity
+      }, 0),
+    [lineItems, skuMap],
+  )
+
+  const qtyBySku = useMemo(
+    () => new Map(lineItems.map((l) => [l.skuId, l.quantity])),
+    [lineItems],
+  )
+
+  const lockedBySku = useMemo(
+    () => new Map(lineItems.map((l) => [l.skuId, l.locked])),
+    [lineItems],
+  )
+
+  const tabOptions = useMemo(() => buildCatalogTabs(sourceSkus), [sourceSkus])
+  const frozenBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'frozen'), [sourceSkus])
+  const foodBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'food'), [sourceSkus])
+  const treatsBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'treats'), [sourceSkus])
+  const toysBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'toys'), [sourceSkus])
+  const everythingElseBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'everything-else'), [sourceSkus])
+  const allBrands = useMemo(
+    () => Array.from(new Set(sourceSkus.map((sku) => sku.manufacturer?.trim()).filter((brand): brand is string => Boolean(brand)))).sort((a, b) => a.localeCompare(b)),
+    [sourceSkus],
+  )
+
+  useEffect(() => {
+    setFrozenBrand('all')
+    setFoodBrand('all')
+    setTreatsBrand('all')
+    setToysBrand('all')
+    setEverythingElseBrand('all')
+  }, [activeTab])
+
+  const filteredCatalog = useMemo(() => {
+    const lq = wsQuery.trim().toLowerCase()
+    return sourceSkus.filter((sku) => {
+      const tabMatch = matchesCatalogTab(sku, activeTab)
+      const brandMatch =
+        activeTab === 'frozen' ? (frozenBrand === 'all' || sku.manufacturer === frozenBrand) :
+        activeTab === 'food' ? (foodBrand === 'all' || sku.manufacturer === foodBrand) :
+        activeTab === 'treats' ? (treatsBrand === 'all' || sku.manufacturer === treatsBrand) :
+        activeTab === 'toys' ? (toysBrand === 'all' || sku.manufacturer === toysBrand) :
+        activeTab === 'everything-else' ? (everythingElseBrand === 'all' || sku.manufacturer === everythingElseBrand) :
+        true
+      const animalMatch = animal === 'all' || sku.animal === animal
+      const queryMatch = !lq || sku.id.toLowerCase().includes(lq) || sku.name.toLowerCase().includes(lq) || sku.manufacturer.toLowerCase().includes(lq)
+      const qty = qtyBySku.get(sku.id) ?? 0
+      const zeroMatch = hideZeroQty ? qty > 0 : true
+      const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
+      const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
+      const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
+      const tier = getQtyConfidenceTier(qty)
+      const isPriority = importedSkuIds.has(sku.id)
+      const signalMatch = selectedSignalFilters.every((filter) => {
+        if (filter === 'hot') return sku.velocity === 'fast'
+        if (filter === 'tier-1') return tier === 1
+        if (filter === 'tier-2') return tier === 2
+        if (filter === 'tier-3') return tier === 3
+        if (filter === 'tier-4') return tier === 4
+        return isPriority
+      })
+
+      return tabMatch && brandMatch && animalMatch && queryMatch && zeroMatch && zeroQohMatch && only111Match && doNotReorderMatch && signalMatch
+    }).sort(compareSkuByNameAndSize)
+  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand, importedSkuIds, selectedSignalFilters])
+
+  function toggleSignalFilter(filter: SignalFilterKey) {
+    setSelectedSignalFilters((prev) => (prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]))
+  }
+
+  function tierLabel(tier: 1 | 2 | 3 | 4): string {
+    return getPrototypeSignalLabel(tier)
+  }
+
+  function applyKayleeRecommendations() {
+    if (!order) return
+    worksheetEditedRef.current = true
+    setRecLoading(true)
+    const budget = typeof order.budget_cents === 'number' && order.budget_cents > 0
+      ? order.budget_cents
+      : 500_000
+    const targetCents = Math.floor(budget * (recBudgetPct / 100))
+    const treatShare = recTreatsPct / 100
+    const velocityRank: Record<string, number> = { fast: 0, medium: 1, slow: 2 }
+    const suggestedQty = (v: string) => (v === 'fast' ? 4 : v === 'medium' ? 2 : 1)
+    const sorted = [...sourceSkus].sort((a, b) => {
+      const vd = (velocityRank[a.velocity] ?? 2) - (velocityRank[b.velocity] ?? 2)
+      return vd !== 0 ? vd : a.name.localeCompare(b.name)
+    })
+    const treatBudget = Math.floor(targetCents * treatShare)
+    const mainBudget = targetCents - treatBudget
+    const picks: Array<{ skuId: string; quantity: number }> = []
+    let spentMain = 0
+    let spentTreats = 0
+    for (const sku of sorted) {
+      const qty = suggestedQty(sku.velocity)
+      const cost = sku.priceCents * qty
+      if (sku.tab === 'treats') {
+        if (spentTreats + cost <= treatBudget) { picks.push({ skuId: sku.id, quantity: qty }); spentTreats += cost }
+      } else {
+        if (spentMain + cost <= mainBudget) { picks.push({ skuId: sku.id, quantity: qty }); spentMain += cost }
+      }
+      if (spentMain >= mainBudget && spentTreats >= treatBudget) break
+    }
+    // Merge: floor walk items keep their qty; recommendations fill the rest
+    setLineItems((prev) => {
+      const existing = new Map(prev.map((l) => [l.skuId, l]))
+      for (const pick of picks) {
+        if (!existing.has(pick.skuId)) {
+          existing.set(pick.skuId, { skuId: pick.skuId, quantity: pick.quantity, locked: false })
+        }
+      }
+      return Array.from(existing.values())
+    })
+    setTimeout(() => setRecLoading(false), 300)
+  }
+
+  function cleanupStreams() {
+    if (streamRef.current) {
+      streamRef.current.close()
+      streamRef.current = null
+    }
+  }
+
+  function formatMoney(cents: number): string {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
+  }
+
+  function upsertLineQuantity(skuId: string, quantity: number) {
+    worksheetEditedRef.current = true
+    setLineItems((prev) => {
+      const nextQty = Math.max(0, quantity)
+      const existingIndex = prev.findIndex((line) => line.skuId === skuId)
+
+      if (existingIndex >= 0) {
+        if (prev[existingIndex].locked) return prev
+        const copy = [...prev]
+        if (nextQty === 0) {
+          copy.splice(existingIndex, 1)
+        } else {
+          copy[existingIndex] = { ...copy[existingIndex], quantity: nextQty }
+        }
+        return copy
+      }
+
+      if (nextQty === 0) return prev
+      return [...prev, { skuId, quantity: nextQty, locked: false }]
+    })
+  }
+
+  function toggleLineLocked(skuId: string, locked: boolean) {
+    worksheetEditedRef.current = true
+    setLineItems((prev) => {
+      const existingIndex = prev.findIndex((line) => line.skuId === skuId)
+      if (existingIndex >= 0) {
+        const copy = [...prev]
+        copy[existingIndex] = { ...copy[existingIndex], locked }
+        return copy
+      }
+      if (!locked) return prev
+      return [...prev, { skuId, quantity: 0, locked: true }]
+    })
+  }
+
+  function sanitizeInput(text: string): string {
+    return text.trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 500)
+  }
+
+  async function handleSuggestionSubmit() {
+    const trimmed = suggestionText.trim()
+    if (!trimmed || trimmed.length > 4096) return
+    await createSuggestion.mutateAsync({ suggestion: trimmed })
+  }
+
+  async function startLiveStream(operatorText: string) {
+    cleanupStreams()
+    setStreamStatus('streaming')
+    setKayleeError('')
+
+    const candidateRoots = ['', '/dev-api']
+    const safeOrderId = order?.id ?? id ?? ''
+    if (!safeOrderId) {
+      setStreamStatus('error')
+      setKayleeError('Order ID is required for live Kaylee chat.')
+      return
+    }
+
+    let messageResponse: Response | null = null
+    let resolvedRoot = ''
+    let lastStatus = 0
+    let lastErrorMessage = ''
+
+    for (let i = 0; i < candidateRoots.length; i += 1) {
+      const root = candidateRoots[i]
+      const isLastRoot = i === candidateRoots.length - 1
+      const res = await fetch(`${root}/v1/orders/${safeOrderId}/kaylee/message`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: operatorText }),
+      })
+
+    try {
+      const contentType = res.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        lastErrorMessage = 'Kaylee returned an unexpected response (not JSON — session may have expired or endpoint is unavailable)'
+        if (isLastRoot) {
+          throw new Error(lastErrorMessage)
+        }
+        continue
+      }
+      if (res.ok) {
+        messageResponse = res
+        resolvedRoot = root
+        break
+      }
+
+      lastStatus = res.status
+      lastErrorMessage = `POST /kaylee/message failed (HTTP ${res.status}) at ${root || '/'} `
+      if (isLastRoot) {
+        throw new Error(lastErrorMessage.trim())
+      }
+    } catch (fetchErr) {
+      if (fetchErr instanceof Error) {
+        lastErrorMessage = fetchErr.message
+      }
+      lastStatus = 0
+      if (isLastRoot) throw fetchErr
+    }
+    }
+
+    if (!messageResponse) {
+      throw new Error(lastErrorMessage || `POST /kaylee/message failed (HTTP ${lastStatus || 502})`)
+    }
+
+    const messageBody = (await messageResponse.json().catch(() => {
+      throw new Error('Kaylee returned an unexpected response (not JSON — session may have expired)')
+    })) as Record<string, unknown>
+    const streamToken =
+      (messageBody.stream_token as string | undefined) ||
+      ((messageBody.data as Record<string, unknown> | undefined)?.stream_token as string | undefined)
+
+    if (!streamToken) {
+      throw new Error('No stream_token returned from Kaylee message endpoint')
+    }
+
+    const replyId = `kaylee-${Date.now()}`
+    setMessages((prev) => [...prev, { id: replyId, role: 'kaylee', text: '' }])
+
+    const streamUrl = `${resolvedRoot}/v1/orders/${safeOrderId}/kaylee/stream?msg=${encodeURIComponent(streamToken)}`
+    const es = new EventSource(streamUrl, { withCredentials: true })
+    streamRef.current = es
+
+    es.onmessage = (event) => {
+      if (event.data === '[DONE]') {
+        setStreamStatus('done')
+        es.close()
+        streamRef.current = null
+        return
+      }
+
+      let token = event.data
+      try {
+        const parsed = JSON.parse(event.data) as Record<string, unknown>
+        token = String(parsed.token ?? parsed.delta ?? parsed.content ?? event.data)
+      } catch {
+        // Keep raw token when backend sends plain text chunks.
+      }
+
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === replyId ? { ...message, text: `${message.text}${token}` } : message,
+        ),
+      )
+    }
+
+    es.onerror = () => {
+      setStreamStatus('error')
+      setKayleeError('Live Kaylee stream failed. Check session/auth and order ID, then retry.')
+      es.close()
+      streamRef.current = null
+    }
+  }
+
+  async function sendKayleeMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (streamStatus === 'streaming') return
+
+    const clean = sanitizeInput(draft)
+    if (!clean) return
+
+    setDraft('')
+    setMessages((prev) => [...prev, { id: `operator-${Date.now()}`, role: 'operator', text: clean }])
+
+    try {
+      await startLiveStream(clean)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send Kaylee message'
+      setStreamStatus('error')
+      setKayleeError(message)
+    }
+  }
+
   if (isLoading || !order) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
+      <div className="min-h-screen bg-amber-50 p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center py-8 text-gray-500">Loading order…</div>
+          <div className="text-center py-8 text-stone-500">Loading order…</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate('/')}>
-            ← Back
+    <div className={cn('flex h-screen flex-col overflow-hidden', getPageClass(uiMode))}>
+      <header className={cn('sticky top-0 z-20 border-b px-6 py-3 backdrop-blur', uiMode === 'dark' ? 'border-[#23314A] bg-[#101B31]/95' : 'border-amber-200 bg-amber-50/95')}>
+        <div className="flex flex-wrap items-center gap-3">
+        <Button
+            className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
+            onClick={() => navigate(`/orders/${order.id}/floor-walk`)}>
+            ← Return to Floor Walk
           </Button>
-          <h1 className="text-2xl font-bold flex-1">{order.vendor_name}</h1>
+          <h1 className="text-lg font-semibold flex-1">{order.vendor_name}</h1>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              title="Light mode"
+              className={cn('rounded-full w-9 h-9 flex items-center justify-center text-lg transition-colors', uiMode === 'light' ? 'bg-[#CE7019] text-white' : 'opacity-40 hover:opacity-80')}
+              onClick={() => setUiMode('light')}
+            >☀</button>
+            <button
+              type="button"
+              title="Dark mode"
+              className={cn('rounded-full w-9 h-9 flex items-center justify-center text-lg transition-colors', uiMode === 'dark' ? 'bg-blue-700 text-white' : 'opacity-40 hover:opacity-80')}
+              onClick={() => setUiMode('dark')}
+            >🌙</button>
+            <button
+              type="button"
+              title="Toggle brand wing"
+              className={cn('rounded-md border px-2 py-1 text-xs font-semibold', uiMode === 'dark' ? 'border-[#334155] bg-[#13233C] text-slate-200' : 'border-amber-300 bg-white text-stone-700')}
+              onClick={() => setLeftWingOpen((v) => !v)}
+              aria-label="Toggle brand wing"
+            >
+              Brands {leftWingOpen ? 'On' : 'Off'}
+            </button>
+            <button
+              type="button"
+              title="Toggle suggestion wing"
+              className={cn('rounded-md border px-2 py-1 text-xs font-semibold', uiMode === 'dark' ? 'border-[#334155] bg-[#13233C] text-slate-200' : 'border-amber-300 bg-white text-stone-700')}
+              onClick={() => setRightWingOpen((v) => !v)}
+              aria-label="Toggle suggestion wing"
+            >
+              Suggestions {rightWingOpen ? 'On' : 'Off'}
+            </button>
+          </div>
+          <span className={cn('text-xs', getMutedTextClass(uiMode))}>Order date: {formatOrderDate(order.order_date)}</span>
           {order.submitted ? (
             <>
-              <span className="text-sm text-gray-500 italic">Read-only</span>
-              <Badge className="bg-green-100 text-green-800">Submitted</Badge>
+              <span className={cn('text-sm italic', getMutedTextClass(uiMode))}>Read-only</span>
+              <Badge className={uiMode === 'dark' ? 'bg-emerald-900 text-emerald-200' : 'bg-green-100 text-green-800'}>Submitted</Badge>
               <Button
-                variant="outline"
                 disabled={isPending}
+                className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
                 onClick={() => submitOrder({ id: order.id, submitted: false })}
               >
                 Unsubmit
@@ -295,53 +581,529 @@ export function OrderDetail() {
             </>
           ) : (
             <>
-              <Badge className="bg-gray-100 text-gray-800">In Progress</Badge>
+              <Badge className={uiMode === 'dark' ? 'bg-[#153B2A] text-[#86EFAC]' : 'bg-amber-100 text-amber-800'}>In Progress</Badge>
+              <span className={cn('text-xs', getMutedTextClass(uiMode))}>✓ auto-saving</span>
               <Button
                 disabled={isPending}
-                onClick={() => submitOrder({ id: order.id, submitted: true })}
+                className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
+                onClick={() => submitOrder({ id: order.id, submitted: true }, { onSuccess: () => navigate('/') })}
               >
-                Mark Submitted
+                Return to Orders
               </Button>
             </>
           )}
         </div>
+        <div className="mt-2 h-1.5 rounded-full bg-gradient-to-r from-[#762123] via-[#006A71] to-[#CE7019]" />
+      </header>
 
-        <p className="text-sm text-gray-500">
-          Order date: {formatOrderDate(order.order_date)}
-        </p>
+      <main
+        className={cn(
+          'grid h-full min-h-0 flex-1 grid-cols-1 gap-4 p-4 overflow-hidden',
+          leftWingOpen && rightWingOpen
+            ? 'xl:grid-cols-[18rem_minmax(0,1fr)_minmax(300px,24vw)_24rem]'
+            : leftWingOpen
+              ? 'xl:grid-cols-[18rem_minmax(0,1fr)_minmax(300px,24vw)]'
+              : rightWingOpen
+                ? 'xl:grid-cols-[minmax(0,1fr)_minmax(300px,24vw)_24rem]'
+                : 'xl:grid-cols-[minmax(0,1fr)_minmax(300px,24vw)]',
+        )}
+      >
+        {leftWingOpen && (
+          <aside className={cn('min-h-0 overflow-auto rounded-lg border p-4', getSectionClass(uiMode))}>
+            <h3 className="text-sm font-semibold">Brand Filters</h3>
+            <p className={cn('mt-1 text-xs', getMutedTextClass(uiMode))}>All brands currently available for filtering.</p>
+            <div className="mt-3 overflow-auto rounded border p-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('all')
+                  setWsQuery('')
+                  setSelectedSideBrand(null)
+                }}
+                aria-pressed={selectedSideBrand === null}
+                className={cn(
+                  'mb-1 block w-full rounded px-2 py-1 text-left text-xs font-semibold',
+                  selectedSideBrand === null
+                    ? (uiMode === 'dark' ? 'bg-sky-700/40 text-sky-200' : 'bg-teal-700 text-white')
+                    : (uiMode === 'dark' ? 'hover:bg-[#13233C]' : 'hover:bg-amber-100'),
+                )}
+              >
+                All
+              </button>
+              {allBrands.map((brand) => (
+                <button
+                  key={brand}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('all')
+                    if (selectedSideBrand === brand) {
+                      setSelectedSideBrand(null)
+                      setWsQuery('')
+                      return
+                    }
+                    setSelectedSideBrand(brand)
+                    setWsQuery(brand)
+                  }}
+                  aria-pressed={selectedSideBrand === brand}
+                  className={cn(
+                    'mb-1 block w-full rounded px-2 py-1 text-left text-xs',
+                    selectedSideBrand === brand
+                      ? (uiMode === 'dark' ? 'bg-sky-700/40 text-sky-200' : 'bg-teal-700 text-white')
+                      : (uiMode === 'dark' ? 'hover:bg-[#13233C]' : 'hover:bg-amber-100'),
+                  )}
+                >
+                  {brand}
+                </button>
+              ))}
+            </div>
+          </aside>
+        )}
 
-        {/* Tab bar */}
-        <div className="flex border-b">
-          <button
-            role="tab"
-            aria-selected={activeTab === 'floorwalk'}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'floorwalk'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setSearchParams({ tab: 'floorwalk' })}
-          >
-            Floor Walk
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'chair'}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'chair'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-            onClick={() => setSearchParams({ tab: 'chair' })}
-          >
-            Chair
-          </button>
+        <section className={cn('flex min-h-0 flex-col rounded-lg border p-4 shadow-sm', getSectionClass(uiMode))}>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-base font-semibold">Order Worksheet</h2>
+            <span className={cn('text-xs', getMutedTextClass(uiMode))}>Floor walk layout applied</span>
+          </div>
+
+          {/* Filter bar */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Input
+              value={wsQuery}
+              onChange={(e) => {
+                setWsQuery(e.target.value)
+                setSelectedSideBrand(null)
+              }}
+              placeholder="Search name or SKU"
+              className="max-w-[200px] h-8 text-xs"
+            />
+            <div className={getTogglePillClass(uiMode)}>
+              {(['all', 'dog', 'cat'] as AnimalFilter[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  className={cn('capitalize', animal === opt ? getActiveToggleBtnClass(uiMode) : getInactiveToggleBtnClass(uiMode))}
+                  onClick={() => setAnimal(opt)}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={hideTabs} onChange={(e) => setHideTabs(e.target.checked)} />
+              Hide tabs
+            </label>
+            <label className={cn('ml-auto flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={hideZeroQty} onChange={(e) => setHideZeroQty(e.target.checked)} />
+              Hide zero qty
+            </label>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={onlyZeroQoh} onChange={(e) => setOnlyZeroQoh(e.target.checked)} />
+              Zero QoH
+            </label>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={only111} onChange={(e) => setOnly111(e.target.checked)} />
+              111
+            </label>
+            <label className={cn('flex items-center gap-1.5 text-xs', getMutedTextClass(uiMode))}>
+              <input type="checkbox" checked={hideDoNotReorder} onChange={(e) => setHideDoNotReorder(e.target.checked)} />
+              Hide Do Not Reorder
+            </label>
+          </div>
+
+          {!hideTabs && (
+            <>
+              <div className={cn('mb-2 flex flex-wrap gap-1.5 border-b pb-2', uiMode === 'dark' ? 'border-[#23314A]' : 'border-amber-200')}>
+                {tabOptions.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={cn(
+                      'rounded-full border px-3 py-0.5 text-xs uppercase tracking-wide',
+                      activeTab === tab.key
+                        ? (uiMode === 'dark' ? 'border-sky-500 bg-sky-500/20 text-sky-300' : 'border-teal-700 bg-teal-700 text-white')
+                        : (uiMode === 'dark' ? 'border-[#25324A] bg-transparent text-slate-400' : 'border-amber-300 bg-amber-50 text-stone-700'),
+                    )}
+                    onClick={() => setActiveTab(tab.key)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab === 'food' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Food brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={foodBrand}
+                    onChange={(event) => setFoodBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {foodBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {activeTab === 'frozen' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Frozen brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={frozenBrand}
+                    onChange={(event) => setFrozenBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {frozenBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {activeTab === 'treats' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Treat brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={treatsBrand}
+                    onChange={(event) => setTreatsBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {treatsBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {activeTab === 'toys' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Toy brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={toysBrand}
+                    onChange={(event) => setToysBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {toysBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {activeTab === 'everything-else' && (
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <span className={cn(getMutedTextClass(uiMode))}>Everything Else brand</span>
+                  <select
+                    className={cn('h-8 min-w-[220px] rounded border px-2', getInputClass(uiMode))}
+                    value={everythingElseBrand}
+                    onChange={(event) => setEverythingElseBrand(event.target.value)}
+                  >
+                    <option value="all">All Brands</option>
+                    {everythingElseBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className={cn('mb-1 flex items-center gap-2 text-xs', getMutedTextClass(uiMode))}>
+            <span>Showing {filteredCatalog.length.toLocaleString()} of {sourceSkus.length.toLocaleString()} SKUs</span>
+            {catalogQuery.isLoading ? (
+              <span className="rounded bg-slate-500/20 px-1.5 py-0.5 text-[10px]">loading…</span>
+            ) : catalogSource === 'live' ? (
+              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">● live</span>
+            ) : (
+              <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:text-red-400">● no live data</span>
+            )}
+          </div>
+
+          {!catalogQuery.isLoading && sourceSkus.length === 0 && (
+            <div className={cn('mb-2 rounded border px-3 py-2 text-xs', uiMode === 'dark' ? 'border-red-800 bg-red-950/30 text-red-200' : 'border-red-200 bg-red-50 text-red-700')}>
+              Worksheet requires live catalog data from central. No mock fallback is used here.
+            </div>
+          )}
+
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
+            <span className={cn('font-semibold', getMutedTextClass(uiMode))}>Legend:</span>
+            <button
+              type="button"
+              onClick={() => toggleSignalFilter('hot')}
+              aria-pressed={selectedSignalFilters.includes('hot')}
+              className={cn(
+                'inline-flex rounded border px-2 py-1 font-semibold',
+                selectedSignalFilters.includes('hot') ? getHotBadgeClass(uiMode) : (uiMode === 'dark' ? 'border-[#334155] text-slate-300' : 'border-amber-300 text-stone-600'),
+              )}
+            >
+              HOT
+            </button>
+            {[1, 2, 3, 4].map((tier) => (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => toggleSignalFilter(`tier-${tier}` as SignalFilterKey)}
+                aria-pressed={selectedSignalFilters.includes(`tier-${tier}` as SignalFilterKey)}
+                className={cn(
+                  'inline-flex rounded border px-2 py-1 font-semibold',
+                  selectedSignalFilters.includes(`tier-${tier}` as SignalFilterKey)
+                    ? getSignalBadgeClass(tier as 1 | 2 | 3 | 4, uiMode)
+                    : (uiMode === 'dark' ? 'border-[#334155] text-slate-300' : 'border-amber-300 text-stone-600'),
+                )}
+              >
+                {tierLabel(tier as 1 | 2 | 3 | 4)}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => toggleSignalFilter('priority')}
+              aria-pressed={selectedSignalFilters.includes('priority')}
+              className={cn(
+                'inline-flex rounded border px-2 py-1 font-semibold',
+                selectedSignalFilters.includes('priority')
+                  ? getPriorityBadgeClass(uiMode)
+                  : (uiMode === 'dark' ? 'border-[#334155] text-slate-300' : 'border-amber-300 text-stone-600'),
+              )}
+            >
+              PRIORITY
+            </button>
+          </div>
+
+          <div className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
+            <table className="w-full min-w-[980px] border-collapse text-xs">
+              <thead className={cn('sticky top-0 z-10', getTableHeaderClass(uiMode))}>
+                <tr>
+                  <th className="px-2 py-2 text-left">Lock</th>
+                  <th className="px-2 py-2 text-left">Product</th>
+                  <th className="px-2 py-2 text-left">Pack</th>
+                  <th className="px-2 py-2 text-right">QOH</th>
+                  <th className="px-2 py-2 text-right">Price</th>
+                  <th className="px-2 py-2 text-right">Qty</th>
+                    <th className="px-2 py-2 text-right">Signal</th>
+                  <th className="px-2 py-2 text-right">Line Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCatalog.map((sku) => {
+                  const qty = qtyBySku.get(sku.id) ?? 0
+                  const isLocked = lockedBySku.get(sku.id) ?? false
+                  const lineTotal = sku.priceCents * qty
+                  const tier = getQtyConfidenceTier(qty)
+                  const isPriority = importedSkuIds.has(sku.id)
+
+                  return (
+                    <tr key={sku.id} className={cn(getTableRowBaseClass(uiMode), getTableAltRowClass(uiMode), isPriority && getPriorityRowClass(uiMode))}>
+                      <td className="px-2 py-1">
+                        <input
+                          type="checkbox"
+                          checked={isLocked}
+                          onChange={(event) => toggleLineLocked(sku.id, event.target.checked)}
+                          aria-label={`Lock ${sku.id}`}
+                        />
+                      </td>
+                      <td className="px-2 py-1">{sku.name}</td>
+                      <td className="px-2 py-1">{sku.pack}</td>
+                      <td className="px-2 py-1 text-right">{sku.qoh}</td>
+                      <td className="px-2 py-1 text-right">{formatMoney(sku.priceCents)}</td>
+                      <td className="px-2 py-1 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            className={cn('h-10 w-10 rounded border text-lg font-bold', uiMode === 'dark' ? 'border-[#334155] bg-[#1E293B] text-slate-200 active:bg-[#0B1424]' : 'border-amber-300 bg-amber-50 text-stone-700 active:bg-amber-100')}
+                            onClick={() => upsertLineQuantity(sku.id, qty - 1)}
+                            disabled={order.submitted || isLocked}
+                            aria-label={`Decrease ${sku.id}`}
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min={0}
+                            value={qty}
+                            className={cn('w-16 text-center text-sm', getInputClass(uiMode))}
+                            onChange={(event) => upsertLineQuantity(sku.id, Math.max(0, Number(event.target.value) || 0))}
+                            disabled={order.submitted || isLocked}
+                          />
+                          <button
+                            type="button"
+                            className={cn('h-10 w-10 rounded border text-lg font-bold', uiMode === 'dark' ? 'border-[#334155] bg-[#1E293B] text-slate-200 active:bg-[#0B1424]' : 'border-amber-300 bg-amber-50 text-stone-700 active:bg-amber-100')}
+                            onClick={() => upsertLineQuantity(sku.id, qty + 1)}
+                            disabled={order.submitted || isLocked}
+                            aria-label={`Increase ${sku.id}`}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        {sku.velocity === 'fast' && (
+                          <span className={cn('inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getHotBadgeClass(uiMode))}>
+                            HOT
+                          </span>
+                        )}
+                        <span className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getSignalBadgeClass(tier, uiMode))}>
+                          {tierLabel(tier)}
+                        </span>
+                        {isPriority && (
+                          <span className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getPriorityBadgeClass(uiMode))}>
+                            PRIORITY
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1 text-right font-medium">{formatMoney(lineTotal)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className={cn('mt-2 text-xs', getMutedTextClass(uiMode))}>
+            Floor walk quantities are pre-filled. Adjust or add any SKUs on this worksheet.
+          </p>
+        </section>
+
+        <aside className={cn('flex h-full min-h-0 flex-col rounded-lg border p-4 shadow-sm', getSectionClass(uiMode))}>
+          {/* ── Kaylee Recommends ── */}
+          <div className={cn('mb-4 rounded-lg border p-3', uiMode === 'dark' ? 'border-[#23314A] bg-[#0A182A]' : 'border-amber-200 bg-amber-50')}>
+            <h3 className="mb-2 text-sm font-semibold">Kaylee Recommends</h3>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+              <label className={cn('shrink-0', getMutedTextClass(uiMode))}>% Budget</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={recBudgetPct}
+                onChange={(e) => setRecBudgetPct(Math.min(100, Math.max(1, Number(e.target.value) || 50)))}
+                className={cn('w-16 text-center', getInputClass(uiMode))}
+              />
+              <label className={cn('shrink-0', getMutedTextClass(uiMode))}>% Treats</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={recTreatsPct}
+                onChange={(e) => setRecTreatsPct(Math.min(100, Math.max(0, Number(e.target.value) || 25)))}
+                className={cn('w-16 text-center', getInputClass(uiMode))}
+              />
+            </div>
+            <button
+              type="button"
+              disabled={recLoading}
+              onClick={applyKayleeRecommendations}
+              className={cn(
+                'mt-2 w-full rounded border px-3 py-1.5 text-xs font-semibold transition-colors',
+                recLoading ? 'opacity-50 cursor-wait' : '',
+                uiMode === 'dark'
+                  ? 'border-sky-600 bg-sky-700/30 text-sky-300 hover:bg-sky-700/50'
+                  : 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700',
+              )}
+            >
+              {recLoading ? 'Loading…' : 'Load Recommendations'}
+            </button>
+            <p className={cn('mt-1 text-[10px]', getMutedTextClass(uiMode))}>
+              Adds fast-mover recommendations to floor walk items without overwriting existing quantities.
+            </p>
+          </div>
+
+          <h2 className="mb-3 text-base font-semibold">Kaylee Assistant</h2>
+
+          <div className="mb-2 flex items-center gap-2">
+            <span className={cn('text-xs', getMutedTextClass(uiMode))}>Chat mode: live</span>
+            <span className={cn('ml-auto text-xs', getMutedTextClass(uiMode))}>Status: {streamStatus}</span>
+          </div>
+
+          {kayleeError && <p className="mt-2 rounded bg-rose-50 p-2 text-xs text-rose-700">{kayleeError}</p>}
+
+          <div className={cn('mt-3 min-h-0 flex-1 overflow-y-auto rounded border p-2', getChatBgClass(uiMode))}>
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  'mb-2 max-w-[90%] rounded px-2 py-2 text-xs',
+                  message.role === 'operator'
+                    ? getOperatorBubbleClass(uiMode)
+                    : getKayleeBubbleClass(uiMode),
+                )}
+              >
+                {message.text || (streamStatus === 'streaming' && message.role === 'kaylee' ? '...' : '')}
+              </div>
+            ))}
+            <div ref={chatBottomRef} />
+          </div>
+
+          <form className="mt-2 flex gap-2" onSubmit={sendKayleeMessage}>
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              maxLength={500}
+              placeholder="Ask Kaylee (live endpoint)"
+              className={cn('flex-1 text-xs', getInputClass(uiMode))}
+              disabled={streamStatus === 'streaming'}
+            />
+            <Button type="submit" size="sm" disabled={!draft.trim() || streamStatus === 'streaming'}>
+              Send
+            </Button>
+          </form>
+        </aside>
+
+        {rightWingOpen && (
+          <aside className={cn('min-h-0 overflow-auto rounded-lg border p-4', getSectionClass(uiMode))}>
+            <h3 className="text-sm font-semibold">Suggestion Box</h3>
+            <p className={cn('mt-1 text-xs', getMutedTextClass(uiMode))}>Submit free-form suggestions (max 4096 chars).</p>
+            <textarea
+              value={suggestionText}
+              onChange={(event) => setSuggestionText(event.target.value.slice(0, 4096))}
+              maxLength={4096}
+              className={cn('mt-3 h-28 w-full rounded border p-2 text-xs', getInputClass(uiMode))}
+              placeholder="Type your suggestion here..."
+            />
+            <div className={cn('mt-1 text-right text-[11px]', getMutedTextClass(uiMode))}>{suggestionText.length}/4096</div>
+            <Button
+              type="button"
+              className="mt-2 w-full"
+              onClick={handleSuggestionSubmit}
+              disabled={createSuggestion.isPending || suggestionText.trim().length === 0 || suggestionText.length > 4096}
+            >
+              {createSuggestion.isPending ? 'Submitting…' : 'Submit'}
+            </Button>
+
+            <div className="mt-4 overflow-auto rounded border p-2">
+              {suggestionsQuery.isLoading ? (
+                <p className={cn('text-xs', getMutedTextClass(uiMode))}>Loading suggestions...</p>
+              ) : (
+                (suggestionsQuery.data ?? []).map((row) => (
+                  <div key={row.request_number} className={cn('mb-2 rounded border p-2 text-xs', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">#{row.request_number}</span>
+                      <span className={cn('rounded px-1.5 py-0.5 text-[10px]', uiMode === 'dark' ? 'bg-[#13233C]' : 'bg-amber-100')}>{row.status}</span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap">{row.suggestion}</p>
+                    <p className={cn('mt-1 text-[10px]', getMutedTextClass(uiMode))}>{row.username} • {new Date(row.submitted_at).toLocaleString()}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
+        )}
+      </main>
+
+      <footer className={cn('sticky bottom-0 z-20 px-6 py-3', getFooterClass(uiMode))}>
+        <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <span>Locked Total:</span>
+            <strong>{formatMoney(lockedTotalCents)}</strong>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>Running total:</span>
+            <strong className="text-base">{formatMoney(runningTotalCents)}</strong>
+          </div>
         </div>
-
-        {/* Tab content */}
-        {activeTab === 'floorwalk' && <FloorWalkTab orderId={order.id} />}
-        {activeTab === 'chair' && <ChairTab orderId={order.id} isEditable={!order.submitted && !order.archived} />}
-      </div>
+      </footer>
     </div>
   )
 }
