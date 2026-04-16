@@ -930,7 +930,6 @@ export function OrderDetail() {
           <span className={cn('text-xs', getMutedTextClass(uiMode))}>Order date: {formatOrderDate(order.order_date)}</span>
           {order.submitted ? (
             <>
-<<<<<<< HEAD
               <span className={cn('text-sm italic', getMutedTextClass(uiMode))}>Read-only</span>
               <Badge className={uiMode === 'dark' ? 'bg-emerald-900 text-emerald-200' : 'bg-green-100 text-green-800'}>Submitted</Badge>
               <ExportButton orderId={order.id} label="Export CSV" />
