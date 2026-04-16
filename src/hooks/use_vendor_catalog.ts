@@ -64,6 +64,9 @@ function normalizeItem(row: RawItem, idx: number): ChairSku {
 
   const doNotReorder = /do\s*not\s*reorder|do_not_reorder/i.test(reorderStatus)
 
+  const dosDays = typeof row.dos_days === 'number' ? row.dos_days : null
+  const riskScore = typeof row.risk_score === 'number' ? row.risk_score : null
+
   return {
     id,
     upc,
@@ -79,6 +82,8 @@ function normalizeItem(row: RawItem, idx: number): ChairSku {
     suggestedQty: typeof row.o === 'number' && row.o > 0 ? row.o : undefined,
     reorderStatus,
     doNotReorder,
+    dosDays,
+    riskScore,
   }
 }
 
