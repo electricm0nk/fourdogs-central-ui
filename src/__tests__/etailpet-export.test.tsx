@@ -83,8 +83,8 @@ function setupMocks(order: Order, adapters: VendorAdapter[]) {
 describe('EtailPet export button', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    global.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
-    global.URL.revokeObjectURL = vi.fn()
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
+    vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined)
   })
 
   it('shows "Export EtailPet" button for etailpet orders', () => {
@@ -109,11 +109,12 @@ describe('EtailPet export button', () => {
 
   it('Export EtailPet calls the same export endpoint', async () => {
     const mockBlob = new Blob(['VendorItemCode,ProductName'], { type: 'text/csv' })
-    global.fetch = vi.fn().mockResolvedValue({
+    const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       blob: () => Promise.resolve(mockBlob),
       headers: { get: () => 'attachment; filename="etailpet-order-20260413.csv"' },
     })
+    vi.stubGlobal('fetch', mockFetch)
     setupMocks(etailpetOrder, [etailpetAdapter])
     render(orderDetailWrapper(etailpetOrder.id))
 
@@ -121,7 +122,7 @@ describe('EtailPet export button', () => {
       fireEvent.click(screen.getByRole('button', { name: /export etailpet/i }))
     })
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(mockFetch).toHaveBeenCalledWith(
       `/v1/orders/${etailpetOrder.id}/export/csv`,
       { credentials: 'include' }
     )
@@ -129,11 +130,11 @@ describe('EtailPet export button', () => {
 
   it('shows "✓ Downloaded" after EtailPet export completes', async () => {
     const mockBlob = new Blob(['VendorItemCode,ProductName'], { type: 'text/csv' })
-    global.fetch = vi.fn().mockResolvedValue({
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       blob: () => Promise.resolve(mockBlob),
       headers: { get: () => null },
-    })
+    }))
     setupMocks(etailpetOrder, [etailpetAdapter])
     render(orderDetailWrapper(etailpetOrder.id))
 

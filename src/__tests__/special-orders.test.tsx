@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecialOrders } from '@/pages/SpecialOrders'
@@ -9,6 +9,7 @@ import {
   useConfirmSpecialOrder,
   useDiscardSpecialOrder,
 } from '@/hooks/use_special_orders'
+import type { ImportState } from '@/hooks/use_special_orders'
 import type { SpecialOrdersStaging } from '@/types/special_order'
 
 vi.mock('@/hooks/use_special_orders', () => ({
@@ -49,7 +50,7 @@ function wrapper() {
 
 function setupDefaultMocks(
   stagingRows: SpecialOrdersStaging[] = [],
-  uploadState = { status: 'idle' as const }
+  uploadState: ImportState = { status: 'idle' }
 ) {
   vi.mocked(useImportSpecialOrders).mockReturnValue({
     upload: vi.fn(),

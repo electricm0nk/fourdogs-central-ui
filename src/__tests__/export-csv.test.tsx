@@ -55,13 +55,13 @@ function setupOrderMocks(order = submittedOrder) {
 
 function mockFetchCSV() {
   const mockBlob = new Blob(['SKU,Description\nSKU-A,Dog Food,3'], { type: 'text/csv' })
-  global.fetch = vi.fn().mockResolvedValue({
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
     ok: true,
     blob: () => Promise.resolve(mockBlob),
     headers: { get: () => 'attachment; filename="export.csv"' },
-  })
-  global.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
-  global.URL.revokeObjectURL = vi.fn()
+  }))
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
+  vi.spyOn(URL, 'revokeObjectURL').mockReturnValue(undefined)
 }
 
 describe('ExportCSVButton', () => {
@@ -89,7 +89,7 @@ describe('ExportCSVButton', () => {
       fireEvent.click(screen.getByRole('button', { name: /export csv/i }))
     })
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       `/v1/orders/${submittedOrder.id}/export/csv`,
       { credentials: 'include' }
     )

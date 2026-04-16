@@ -82,7 +82,7 @@ const noGhostItem: OrderItem = {
 
 const specialOrderItem: OrderItem = {
   id: '00000000-0000-0000-0000-000000000014',
-  order_id: mockOrder.id,
+  order_id: ORDER_ID,
   item_id: 'SKU-SPECIAL',
   item_name: 'Exotic Cat Food 6lb',
   category: null,
@@ -224,23 +224,20 @@ describe('OrderingGrid', () => {
 describe('Special Order badge in OrderingGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(useOrder).mockReturnValue({ data: mockOrder, isLoading: false, error: null } as unknown as ReturnType<typeof useOrder>)
-    vi.mocked(useSubmitOrder).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useSubmitOrder>)
-    vi.mocked(useArchiveOrder).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useArchiveOrder>)
     vi.mocked(usePatchOrderItem).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof usePatchOrderItem>)
     vi.mocked(useKayleeAnalyze).mockReturnValue({ mutate: vi.fn(), isPending: false, data: undefined } as unknown as ReturnType<typeof useKayleeAnalyze>)
   })
 
   it('shows "Special Order" badge for is_special_order items', () => {
     vi.mocked(useOrderItems).mockReturnValue({ data: [specialOrderItem], isLoading: false } as unknown as ReturnType<typeof useOrderItems>)
-    render(wrapChair(mockOrder.id))
+    render(makeGrid())
 
     expect(screen.getByText('Special Order')).toBeInTheDocument()
   })
 
   it('does not show "Special Order" badge for regular items', () => {
     vi.mocked(useOrderItems).mockReturnValue({ data: [tier2Item], isLoading: false } as unknown as ReturnType<typeof useOrderItems>)
-    render(wrapChair(mockOrder.id))
+    render(makeGrid())
 
     expect(screen.queryByText('Special Order')).not.toBeInTheDocument()
   })
