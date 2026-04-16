@@ -38,8 +38,6 @@ import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
-import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
-import { useIsWide } from '@/hooks/use_is_wide'
 import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
 import type { OrderItem } from '@/types/order_item'
 
@@ -81,15 +79,6 @@ interface WorksheetLineItem {
 function formatOrderDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function ItemSkeleton() {
-  return (
-    <div
-      data-testid="item-skeleton"
-      className="h-12 rounded-md bg-gray-200 animate-pulse"
-    />
-  )
 }
 
 function QtyControl({
@@ -208,40 +197,6 @@ function QtyControl({
   )
 }
 
-function OrderItemRow({
-  item,
-  orderId,
-  onPatch,
-}: {
-  item: OrderItem
-  orderId: string
-  onPatch: (args: { orderId: string; itemId: string; final_qty: number }) => void
-}) {
-  return (
-    <div
-      className={`relative flex items-center justify-between min-h-[48px] p-3 rounded-md border ${
-        item.must_have ? 'border-amber-400 bg-amber-50' : 'bg-white'
-      }`}
-    >
-      <div className="flex-1">
-        <p className="font-medium text-sm">{item.item_name}</p>
-        <p className="text-xs text-gray-500">SKU: {item.item_id} · Stock: {item.current_stock_qty}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        {item.must_have && (
-          <Badge className="bg-amber-100 text-amber-800 text-xs">Must-Have</Badge>
-        )}
-        <QtyControl
-          value={item.final_qty}
-          itemId={item.id}
-          orderId={orderId}
-          mustHave={item.must_have}
-          onPatch={onPatch}
-        />
-      </div>
-    </div>
-  )
-}
 
 const SUCCESS_DURATION_MS = 3000
 
