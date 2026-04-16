@@ -47,6 +47,7 @@ type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
 const TABLE_ROW_HEIGHT_PX = 56
 const TABLE_OVERSCAN_ROWS = 10
+const DEBOUNCE_MS = 600
 
 interface ChatMessage {
   id: string
@@ -238,81 +239,6 @@ function OrderItemRow({
           onPatch={onPatch}
         />
       </div>
-    </div>
-  )
-}
-
-function FloorWalkTab({ orderId }: { orderId: string }) {
-  const [search, setSearch] = useState('')
-  const { data: items, isLoading } = useOrderItems(orderId)
-  const { mutate: patchItem, isPending } = usePatchOrderItem()
-
-  const filtered = items?.filter(
-    (item) =>
-      search === '' ||
-      item.item_name.toLowerCase().includes(search.toLowerCase()) ||
-      item.item_id.toLowerCase().includes(search.toLowerCase())
-  )
-
-  return (
-    <div className="space-y-3">
-      <ConnectivityBadge isSyncing={isPending} />
-
-      <div className="relative">
-        <Input
-          placeholder="Search items…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            onClick={() => setSearch('')}
-            aria-label="Clear search"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
-      {isLoading && (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <ItemSkeleton key={i} />)}
-        </div>
-      )}
-
-      {!isLoading && (!filtered || filtered.length === 0) && (
-        <div className="py-8 text-center text-gray-500">
-          {search ? 'No items match your search.' : 'No items on this order yet. Items are imported when the order is created.'}
-        </div>
-      )}
-
-      {!isLoading && filtered && filtered.length > 0 && (
-        <div className="space-y-2">
-          {filtered.map((item) => (
-            <OrderItemRow
-              key={item.id}
-              item={item}
-              orderId={orderId}
-              onPatch={patchItem}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ChairTab({ orderId, isEditable }: { orderId: string; isEditable: boolean }) {
-  const wide = useIsWide()
-  return wide ? (
-    <div className="grid grid-cols-[1fr_380px] gap-4 h-full">
-      <OrderingGrid orderId={orderId} isEditable={isEditable} />
-      <KayleePanel orderId={orderId} />
-    </div>
-  ) : (
-    <div className="flex flex-col gap-4">
-      <OrderingGrid orderId={orderId} isEditable={isEditable} />
     </div>
   )
 }
