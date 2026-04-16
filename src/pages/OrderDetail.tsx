@@ -39,6 +39,7 @@ import { useOrder } from '@/hooks/use_order'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
 import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
+import { useVersions, formatWiringVersion } from '@/hooks/use_versions'
 
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
@@ -144,6 +145,8 @@ export function OrderDetail() {
   const { mutate: submitOrder, isPending } = useSubmitOrder()
   const { data: vendorAdapters } = useVendorAdapters()
   const adapterType = vendorAdapters?.find((a) => a.id === order?.vendor_adapter_id)?.adapter_type ?? ''
+  const { data: versionsData } = useVersions()
+  const wiringVersion = formatWiringVersion(versionsData)
 
   const catalogQuery = useVendorCatalog(order?.vendor_id, order?.vendor_adapter_id)
   const sourceSkus = catalogQuery.data ?? []
@@ -722,6 +725,14 @@ export function OrderDetail() {
             </button>
           </div>
           <span className={cn('text-xs', getMutedTextClass(uiMode))}>Order date: {formatOrderDate(order.order_date)}</span>
+          {wiringVersion && (
+            <span
+              title="Velocity wiring version in use for this session"
+              className={cn('text-xs font-mono opacity-60', getMutedTextClass(uiMode))}
+            >
+              v{wiringVersion}
+            </span>
+          )}
           {order.submitted ? (
             <>
               <span className={cn('text-sm italic', getMutedTextClass(uiMode))}>Read-only</span>
