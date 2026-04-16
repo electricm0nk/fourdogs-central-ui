@@ -33,6 +33,7 @@ const analyzedItem: OrderItem = {
   final_qty: 4,
   ghost_qty: 4,
   confidence_tier: 2,
+  is_special_order: false,
 }
 
 function makeKaylee() {

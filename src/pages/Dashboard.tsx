@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, Link } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -493,6 +493,12 @@ export function Dashboard() {
           >
             Orders
           </h1>
+          <Link
+            to="/special-orders"
+            className={cn('text-sm font-medium', uiMode === 'dark' ? 'text-blue-300 hover:text-blue-100' : 'text-white/80 hover:text-white')}
+          >
+            Special Orders
+          </Link>
           <div className="flex gap-1">
             {/* Sun — bigger + yellow when active in dark mode */}
             <button

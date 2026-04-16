@@ -34,6 +34,7 @@ const itemWithoutGhostQty: OrderItem = {
   final_qty: 0,
   ghost_qty: null,
   confidence_tier: null,
+  is_special_order: false,
 }
 
 const itemWithGhostQty: OrderItem = {

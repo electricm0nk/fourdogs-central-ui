@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useParams, useNavigate } from 'react-router'
@@ -38,6 +38,7 @@ import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
+import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
 
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
@@ -78,11 +79,40 @@ function formatOrderDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+
+const SUCCESS_DURATION_MS = 3000
+
+function ExportButton({ orderId, label }: { orderId: string; label: string }) {
+  const [exportSuccess, setExportSuccess] = useState(false)
+
+  const handleExport = useCallback(async () => {
+    const resp = await fetch(`/v1/orders/${orderId}/export/csv`, { credentials: 'include' })
+    if (!resp.ok) return
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = resp.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'order-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    setExportSuccess(true)
+    setTimeout(() => setExportSuccess(false), SUCCESS_DURATION_MS)
+  }, [orderId])
+
+  return (
+    <Button variant="outline" onClick={handleExport}>
+      {exportSuccess ? '✓ Downloaded' : label}
+    </Button>
+  )
+}
+
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: order, isLoading } = useOrder(id ?? '')
   const { mutate: submitOrder, isPending } = useSubmitOrder()
+  const { data: vendorAdapters } = useVendorAdapters()
+  const adapterType = vendorAdapters?.find((a) => a.id === order?.vendor_adapter_id)?.adapter_type ?? ''
 
   const catalogQuery = useVendorCatalog(order?.vendor_id, order?.vendor_adapter_id)
   const sourceSkus = catalogQuery.data ?? []
@@ -665,6 +695,10 @@ export function OrderDetail() {
             <>
               <span className={cn('text-sm italic', getMutedTextClass(uiMode))}>Read-only</span>
               <Badge className={uiMode === 'dark' ? 'bg-emerald-900 text-emerald-200' : 'bg-green-100 text-green-800'}>Submitted</Badge>
+              <ExportButton orderId={order.id} label="Export CSV" />
+              {adapterType === 'etailpet' && (
+                <ExportButton orderId={order.id} label="Export EtailPet" />
+              )}
               <Button
                 disabled={isPending}
                 className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
