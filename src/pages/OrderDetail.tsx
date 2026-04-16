@@ -44,7 +44,6 @@ type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
 const TABLE_ROW_HEIGHT_PX = 56
 const TABLE_OVERSCAN_ROWS = 10
-const DEBOUNCE_MS = 600
 
 interface ChatMessage {
   id: string
