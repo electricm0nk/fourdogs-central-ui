@@ -10,4 +10,5 @@ export interface OrderItem {
   final_qty: number
   ghost_qty: number | null
   confidence_tier: number | null
+  is_special_order: boolean
 }

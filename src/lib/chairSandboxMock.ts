@@ -23,6 +23,8 @@ export interface ChairSku {
   suggestedQty?: number
   reorderStatus?: string
   doNotReorder?: boolean
+  dosDays?: number | null
+  riskScore?: number | null
 }
 
 export interface SeededOrderLine {

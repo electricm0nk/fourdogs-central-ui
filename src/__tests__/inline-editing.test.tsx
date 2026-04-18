@@ -25,6 +25,7 @@ const editableItem: OrderItem = {
   final_qty: 4,
   ghost_qty: 4,
   confidence_tier: 1,
+  is_special_order: false,
 }
 
 function makeGrid(isEditable: boolean) {

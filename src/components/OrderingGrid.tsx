@@ -4,6 +4,7 @@ import { usePatchOrderItem } from '@/hooks/use_patch_order_item'
 import { useLogLearning } from '@/hooks/use_log_learning'
 import { resolveActionType } from '@/lib/resolve_action_type'
 import { ConfidenceBadge } from './ConfidenceBadge'
+import { Badge } from '@/components/ui/badge'
 
 function ghostQtyCell(item: {
   ghost_qty: number | null
@@ -140,6 +141,11 @@ export function OrderingGrid({
               <tr key={item.id} className="border-b last:border-0 hover:bg-gray-50">
                 <td className="px-4 py-3">
                   <span className="font-medium">{item.item_name}</span>
+                  {item.is_special_order && (
+                    <Badge className="ml-2 bg-purple-100 text-purple-800 text-xs">
+                      Special Order
+                    </Badge>
+                  )}
                   {item.category && (
                     <span className="ml-2 text-xs text-gray-400">{item.category}</span>
                   )}

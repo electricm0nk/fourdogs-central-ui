@@ -26,6 +26,7 @@ const itemWithGhostQty: OrderItem = {
   final_qty: 3,
   ghost_qty: 5,
   confidence_tier: 2,
+  is_special_order: false,
 }
 
 const tier1Item: OrderItem = {

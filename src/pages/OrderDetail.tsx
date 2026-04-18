@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useParams, useNavigate } from 'react-router'
@@ -38,6 +38,8 @@ import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
 import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
+import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
+import { useVersions, formatWiringVersion } from '@/hooks/use_versions'
 
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
@@ -73,9 +75,67 @@ interface WorksheetLineItem {
   kayleeQty?: number
 }
 
+/**
+ * Returns a Tailwind class string for the risk badge based on score.
+ * 80-100: Red (CRITICAL), 60-79: Orange (HIGH), 40-59: Yellow (MEDIUM),
+ * 20-39: Light green (LOW), 0-19: Green (SAFE)
+ */
+function getRiskBadgeClass(score: number, uiMode: UiMode): string {
+  if (score >= 80) {
+    return uiMode === 'dark'
+      ? 'border border-red-700 bg-red-900/40 text-red-300'
+      : 'border border-red-300 bg-red-100 text-red-800'
+  }
+  if (score >= 60) {
+    return uiMode === 'dark'
+      ? 'border border-orange-700 bg-orange-900/40 text-orange-300'
+      : 'border border-orange-300 bg-orange-100 text-orange-800'
+  }
+  if (score >= 40) {
+    return uiMode === 'dark'
+      ? 'border border-yellow-700 bg-yellow-900/30 text-yellow-300'
+      : 'border border-yellow-300 bg-yellow-100 text-yellow-800'
+  }
+  if (score >= 20) {
+    return uiMode === 'dark'
+      ? 'border border-green-800 bg-green-900/30 text-green-400'
+      : 'border border-green-300 bg-green-100 text-green-700'
+  }
+  return uiMode === 'dark'
+    ? 'border border-emerald-800 bg-emerald-900/30 text-emerald-400'
+    : 'border border-emerald-300 bg-emerald-100 text-emerald-700'
+}
+
 function formatOrderDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+
+const SUCCESS_DURATION_MS = 3000
+
+function ExportButton({ orderId, label }: { orderId: string; label: string }) {
+  const [exportSuccess, setExportSuccess] = useState(false)
+
+  const handleExport = useCallback(async () => {
+    const resp = await fetch(`/v1/orders/${orderId}/export/csv`, { credentials: 'include' })
+    if (!resp.ok) return
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = resp.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'order-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    setExportSuccess(true)
+    setTimeout(() => setExportSuccess(false), SUCCESS_DURATION_MS)
+  }, [orderId])
+
+  return (
+    <Button variant="outline" onClick={handleExport}>
+      {exportSuccess ? '✓ Downloaded' : label}
+    </Button>
+  )
 }
 
 export function OrderDetail() {
@@ -83,6 +143,10 @@ export function OrderDetail() {
   const navigate = useNavigate()
   const { data: order, isLoading } = useOrder(id ?? '')
   const { mutate: submitOrder, isPending } = useSubmitOrder()
+  const { data: vendorAdapters } = useVendorAdapters()
+  const adapterType = vendorAdapters?.find((a) => a.id === order?.vendor_adapter_id)?.adapter_type ?? ''
+  const { data: versionsData } = useVersions()
+  const wiringVersion = formatWiringVersion(versionsData)
 
   const catalogQuery = useVendorCatalog(order?.vendor_id, order?.vendor_adapter_id)
   const sourceSkus = catalogQuery.data ?? []
@@ -661,10 +725,22 @@ export function OrderDetail() {
             </button>
           </div>
           <span className={cn('text-xs', getMutedTextClass(uiMode))}>Order date: {formatOrderDate(order.order_date)}</span>
+          {wiringVersion && (
+            <span
+              title="Velocity wiring version in use for this session"
+              className={cn('text-xs font-mono opacity-60', getMutedTextClass(uiMode))}
+            >
+              v{wiringVersion}
+            </span>
+          )}
           {order.submitted ? (
             <>
               <span className={cn('text-sm italic', getMutedTextClass(uiMode))}>Read-only</span>
               <Badge className={uiMode === 'dark' ? 'bg-emerald-900 text-emerald-200' : 'bg-green-100 text-green-800'}>Submitted</Badge>
+              <ExportButton orderId={order.id} label="Export CSV" />
+              {adapterType === 'etailpet' && (
+                <ExportButton orderId={order.id} label="Export EtailPet" />
+              )}
               <Button
                 disabled={isPending}
                 className={uiMode === 'dark' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-[#CE7019] hover:bg-amber-600 text-white'}
@@ -975,23 +1051,25 @@ export function OrderDetail() {
             }}
             className={cn('min-h-0 flex-1 overflow-auto rounded border', uiMode === 'dark' ? 'border-[#25324A]' : 'border-amber-200')}
           >
-            <table className="w-full min-w-[980px] border-collapse text-xs">
+            <table className="w-full min-w-[1120px] border-collapse text-xs">
               <thead className={cn('sticky top-0 z-10', getTableHeaderClass(uiMode))}>
                 <tr>
                   <th className="px-2 py-2 text-left">Lock</th>
                   <th className="px-2 py-2 text-left">Product</th>
                   <th className="px-2 py-2 text-left">Pack</th>
                   <th className="px-2 py-2 text-right">QOH</th>
+                  <th className="px-2 py-2 text-right" title="Days of supply: estimated days until stockout at current sales velocity">DOS (days)</th>
+                  <th className="px-2 py-2 text-right" title="Composite inventory risk score (0–100): combines velocity, days of supply, and customer replenishment urgency">Risk %</th>
                   <th className="px-2 py-2 text-right">Price</th>
                   <th className="px-2 py-2 text-right">Qty</th>
-                    <th className="px-2 py-2 text-right">Signal</th>
+                  <th className="px-2 py-2 text-right">Signal</th>
                   <th className="px-2 py-2 text-right">Line Total</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleWorksheetRange.topSpacerHeight > 0 && (
                   <tr>
-                    <td colSpan={8} style={{ height: visibleWorksheetRange.topSpacerHeight }} />
+                    <td colSpan={10} style={{ height: visibleWorksheetRange.topSpacerHeight }} />
                   </tr>
                 )}
                 {visibleWorksheetRange.rows.map((sku) => {
@@ -1018,6 +1096,18 @@ export function OrderDetail() {
                       <td className="px-2 py-1">{sku.name}</td>
                       <td className="px-2 py-1">{sku.pack}</td>
                       <td className="px-2 py-1 text-right">{sku.qoh}</td>
+                      <td className="px-2 py-1 text-right">
+                        {sku.dosDays != null ? sku.dosDays : <span className={cn('opacity-40', getMutedTextClass(uiMode))}>—</span>}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        {sku.riskScore != null ? (
+                          <span className={cn('inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold', getRiskBadgeClass(sku.riskScore, uiMode))}>
+                            {sku.riskScore}%
+                          </span>
+                        ) : (
+                          <span className={cn('opacity-40', getMutedTextClass(uiMode))}>—</span>
+                        )}
+                      </td>
                       <td className="px-2 py-1 text-right">{formatMoney(sku.priceCents)}</td>
                       <td className="px-2 py-1 text-right">
                         <div className="inline-flex items-center gap-1">
@@ -1070,7 +1160,7 @@ export function OrderDetail() {
                 })}
                 {visibleWorksheetRange.bottomSpacerHeight > 0 && (
                   <tr>
-                    <td colSpan={8} style={{ height: visibleWorksheetRange.bottomSpacerHeight }} />
+                    <td colSpan={10} style={{ height: visibleWorksheetRange.bottomSpacerHeight }} />
                   </tr>
                 )}
               </tbody>

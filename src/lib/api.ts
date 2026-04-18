@@ -1,10 +1,12 @@
 export class ApiError extends Error {
   status: number
+  body: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.body = body
   }
 }
 
@@ -22,7 +24,11 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   })
 
   if (res.status === 401) throw new ApiError(401, 'Unauthorized')
-  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  if (!res.ok) {
+    let body: unknown
+    try { body = await res.json() } catch { /* non-JSON error body */ }
+    throw new ApiError(res.status, res.statusText, body)
+  }
 
   return res.json() as Promise<T>
 }

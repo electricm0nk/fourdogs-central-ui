@@ -8,6 +8,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m
 const OrderDetail = lazy(() => import('@/pages/OrderDetail').then(m => ({ default: m.OrderDetail })))
 const FloorWalk = lazy(() => import('@/pages/FloorWalk').then(m => ({ default: m.FloorWalk })))
 const ChairSandbox = lazy(() => import('@/pages/ChairSandbox').then(m => ({ default: m.ChairSandbox })))
+const SpecialOrders = lazy(() => import('@/pages/SpecialOrders').then(m => ({ default: m.SpecialOrders })))
 
 // Root layout — wraps all routes
 function RootLayout() {
@@ -48,6 +49,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <FloorWalk />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'special-orders',
+        element: (
+          <ProtectedRoute>
+            <SpecialOrders />
           </ProtectedRoute>
         ),
       },
