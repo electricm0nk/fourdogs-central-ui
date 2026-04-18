@@ -141,7 +141,7 @@ function ExportButton({ orderId, label }: { orderId: string; label: string }) {
 export function OrderDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: order, isLoading } = useOrder(id ?? '')
+  const { data: order, isLoading, isError, error } = useOrder(id ?? '')
   const { mutate: submitOrder, isPending } = useSubmitOrder()
   const { data: vendorAdapters } = useVendorAdapters()
   const adapterType = vendorAdapters?.find((a) => a.id === order?.vendor_adapter_id)?.adapter_type ?? ''
@@ -672,11 +672,30 @@ export function OrderDetail() {
     }
   }
 
-  if (isLoading || !order) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-amber-50 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="text-center py-8 text-stone-500">Loading order…</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (isError || !order) {
+    const message = error instanceof Error ? error.message : 'The order could not be loaded.'
+
+    return (
+      <div className="min-h-screen bg-amber-50 p-6">
+        <div className="max-w-4xl mx-auto text-center py-10 space-y-3">
+          <div className="text-stone-700 font-semibold">Unable to load this order.</div>
+          <div className="text-sm text-stone-500">{message}</div>
+          <Button
+            className="bg-[#CE7019] hover:bg-amber-600 text-white"
+            onClick={() => navigate('/')}
+          >
+            Return to Orders
+          </Button>
         </div>
       </div>
     )
