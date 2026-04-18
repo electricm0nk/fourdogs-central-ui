@@ -119,7 +119,7 @@ describe('OrderDetail — velocity version display', () => {
     } as unknown as ReturnType<typeof useVersions>)
     vi.mocked(formatWiringVersion).mockReturnValue('3')
 
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     expect(await screen.findByText('v3')).toBeInTheDocument()
   })
 
@@ -131,7 +131,7 @@ describe('OrderDetail — velocity version display', () => {
     } as unknown as ReturnType<typeof useVersions>)
     vi.mocked(formatWiringVersion).mockReturnValue('18.1')
 
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     expect(await screen.findByText('v18.1')).toBeInTheDocument()
   })
 
@@ -143,7 +143,7 @@ describe('OrderDetail — velocity version display', () => {
     } as unknown as ReturnType<typeof useVersions>)
     vi.mocked(formatWiringVersion).mockReturnValue('')
 
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     // version display should not be present
     expect(screen.queryByText(/^v\d/)).toBeNull()
   })

@@ -135,29 +135,29 @@ describe('OrderDetail — DOS and Risk columns', () => {
   })
 
   it('renders DOS (days) column header', () => {
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     expect(screen.getByText('DOS (days)')).toBeInTheDocument()
   })
 
   it('renders Risk % column header', () => {
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     expect(screen.getByText('Risk %')).toBeInTheDocument()
   })
 
   it('displays dos_days value for items that have it', async () => {
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     expect(await screen.findByText('3')).toBeInTheDocument()
     expect(await screen.findByText('180')).toBeInTheDocument()
   })
 
   it('displays risk_score as a badge with percent sign', async () => {
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     expect(await screen.findByText('92%')).toBeInTheDocument()
     expect(await screen.findByText('5%')).toBeInTheDocument()
   })
 
   it('renders dash placeholder for items with null dos_days and risk_score', async () => {
-    render(<OrderDetail />, { wrapper: ({ children }) => orderDetailWrapper(ORDER_ID) })
+    render(<OrderDetail />, { wrapper: () => orderDetailWrapper(ORDER_ID) })
     // Null columns render as "—" (em dash)
     const dashes = await screen.findAllByText('—')
     expect(dashes.length).toBeGreaterThanOrEqual(2)
