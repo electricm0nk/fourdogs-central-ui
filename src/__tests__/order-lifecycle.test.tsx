@@ -542,4 +542,66 @@ describe('OrderDetail — submit lifecycle', () => {
       expect(parseInt(qtyInput.value, 10)).toBeGreaterThan(0)
     })
   })
+
+  it('fills an existing zero-quantity worksheet row when recommendations qualify it by riskScore', async () => {
+    const riskCatalog: ChairSku[] = [
+      {
+        id: 'SKU-RISK-2',
+        upc: '000000000199',
+        name: 'Risk Item Beta',
+        tab: 'core',
+        category: 'core',
+        manufacturer: 'Brand R',
+        animal: 'dog',
+        pack: '3',
+        priceCents: 100,
+        velocity: 'fast',
+        qoh: 0,
+        reorderStatus: 'SMART_ORDER',
+        doNotReorder: false,
+        riskScore: 82,
+      },
+    ]
+
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: riskCatalog,
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    vi.mocked(useOrder).mockReturnValue({
+      data: { ...activeOrder, budget_cents: 10_000 },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (String(url).includes('/floor-walk-lines')) return { data: [] }
+      if (String(url) === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getByText('Risk Item Beta')).toBeInTheDocument()
+    })
+
+    const row = screen.getByText('Risk Item Beta').closest('tr')
+    expect(row).not.toBeNull()
+
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-risk-2/i }))
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /decrease sku-risk-2/i }))
+
+    await waitFor(() => {
+      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      expect(qtyInput.value).toBe('0')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /load recommendations/i }))
+
+    await waitFor(() => {
+      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      expect(qtyInput.value).toBe('3')
+    })
+  })
 })

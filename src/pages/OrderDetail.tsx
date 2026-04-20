@@ -470,8 +470,22 @@ export function OrderDetail() {
     setLineItems((prev) => {
       const existing = new Map(prev.map((l) => [l.skuId, l]))
       for (const pick of picks) {
-        if (!existing.has(pick.skuId)) {
+        const current = existing.get(pick.skuId)
+        if (!current) {
           existing.set(pick.skuId, { skuId: pick.skuId, quantity: pick.quantity, locked: false, kayleeQty: pick.quantity })
+          continue
+        }
+
+        if (current.locked) {
+          continue
+        }
+
+        if (current.quantity <= 0) {
+          existing.set(pick.skuId, {
+            ...current,
+            quantity: pick.quantity,
+            kayleeQty: pick.quantity,
+          })
         }
       }
       return Array.from(existing.values())
