@@ -25,6 +25,7 @@ import {
   getPriorityBadgeClass,
   getPriorityRowClass,
   getQtyConfidenceTier,
+  resolveSkuTier,
   getSectionClass,
   getSignalBadgeClass,
   getTableAltRowClass,
@@ -333,16 +334,6 @@ export function OrderDetail() {
     [lineItems],
   )
 
-  function resolveSkuTier(qty: number, kayleeQty: number | undefined, isImported: boolean): 1 | 2 | 3 | 4 {
-    if (kayleeQty !== undefined) {
-      if (qty > kayleeQty) return 1
-      if (qty === kayleeQty) return 2
-      return 3
-    }
-    if (!isImported && qty > 0) return 1
-    return getQtyConfidenceTier(qty)
-  }
-
   const tabOptions = useMemo(() => buildCatalogTabs(sourceSkus), [sourceSkus])
   const frozenBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'frozen'), [sourceSkus])
   const foodBrandOptions = useMemo(() => getBrandOptionsForTab(sourceSkus, 'food'), [sourceSkus])
@@ -451,7 +442,10 @@ export function OrderDetail() {
     const treatShare = recTreatsPct / 100
     const velocityRank: Record<string, number> = { fast: 0, medium: 1, slow: 2 }
     const sorted = [...sourceSkus]
-      .filter((sku) => sku.suggestedQty && sku.suggestedQty > 0)
+      .filter((sku) =>
+        (sku.suggestedQty !== undefined && sku.suggestedQty > 0) ||
+        (sku.riskScore != null && sku.riskScore > 0)
+      )
       .sort((a, b) => {
         const vd = (velocityRank[a.velocity] ?? 2) - (velocityRank[b.velocity] ?? 2)
         return vd !== 0 ? vd : a.name.localeCompare(b.name)
@@ -462,7 +456,9 @@ export function OrderDetail() {
     let spentMain = 0
     let spentTreats = 0
     for (const sku of sorted) {
-      const qty = sku.suggestedQty!
+      const qty = (sku.suggestedQty !== undefined && sku.suggestedQty > 0)
+        ? sku.suggestedQty
+        : (parseInt(sku.pack, 10) || 1)
       const cost = sku.priceCents * qty
       if (sku.tab === 'treats') {
         if (spentTreats + cost <= treatBudget) { picks.push({ skuId: sku.id, quantity: qty }); spentTreats += cost }

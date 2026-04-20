@@ -92,6 +92,21 @@ export function getQtyConfidenceTier(quantity: number): 1 | 2 | 3 | 4 {
   return 4
 }
 
+/**
+ * Resolve the display tier for a SKU row in the order worksheet.
+ * Returns 4 (no label) whenever kayleeQty is undefined — i.e. before
+ * "Load Recommendations" has been pressed — so spurious INCREASED/KAYLEE/
+ * DECREASED labels are never shown based purely on entered quantity.
+ */
+export function resolveSkuTier(qty: number, kayleeQty: number | undefined, _isImported: boolean): 1 | 2 | 3 | 4 {
+  if (kayleeQty !== undefined) {
+    if (qty > kayleeQty) return 1
+    if (qty === kayleeQty) return 2
+    return 3
+  }
+  return 4  // No Kaylee recommendation loaded → no tier label
+}
+
 export function getPrototypeSignalLabel(tier: 1 | 2 | 3 | 4): string {
   if (tier === 1) return 'INCREASED'
   if (tier === 2) return 'KAYLEE'

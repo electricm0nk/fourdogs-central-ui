@@ -353,7 +353,7 @@ describe('OrderDetail — submit lifecycle', () => {
     })
   })
 
-  it('applies INCREASED tag when adding a new worksheet item with the plus button', async () => {
+  it('shows no tier label when adding a new worksheet item without Kaylee recommendations loaded', async () => {
     vi.mocked(useOrder).mockReturnValue({
       data: {
         ...activeOrder,
@@ -384,12 +384,13 @@ describe('OrderDetail — submit lifecycle', () => {
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-fw-1/i }))
 
     await waitFor(() => {
-      expect(within(row as HTMLTableRowElement).getByText('INCREASED')).toBeInTheDocument()
+      // No tier label until Kaylee recommendations are loaded (uifix2-1-3)
+      expect(within(row as HTMLTableRowElement).queryByText('INCREASED')).not.toBeInTheDocument()
       expect(within(row as HTMLTableRowElement).queryByText('DECREASED')).not.toBeInTheDocument()
     })
   })
 
-  it('applies legend signal filters as multi-select AND (hot + increased)', async () => {
+  it('applies legend signal filters as multi-select AND (hot + priority)', async () => {
     vi.mocked(useOrder).mockReturnValue({
       data: {
         ...activeOrder,
@@ -420,8 +421,11 @@ describe('OrderDetail — submit lifecycle', () => {
       expect(screen.getByText('Alpha Kibble')).toBeInTheDocument()
     })
 
+    // HOT = velocity fast; PRIORITY = imported from floor-walk
+    // Both items are floor-walk priority; only Alpha Kibble (fast) is HOT
+    // HOT AND PRIORITY together shows only Alpha Kibble
     fireEvent.click(screen.getByRole('button', { name: 'HOT' }))
-    fireEvent.click(screen.getByRole('button', { name: 'INCREASED' }))
+    fireEvent.click(screen.getByRole('button', { name: 'PRIORITY' }))
 
     await waitFor(() => {
       expect(screen.getByText('Alpha Kibble')).toBeInTheDocument()
@@ -480,6 +484,62 @@ describe('OrderDetail — submit lifecycle', () => {
       expect(persistedRow).not.toBeNull()
       const qtyInput = within(persistedRow as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
       expect(qtyInput.value).toBe('3')
+    })
+  })
+
+  it('applies recommendation to items qualified by riskScore when suggestedQty is absent', async () => {
+    // uifix2-1-4: items with riskScore > 0 qualify for Load Recommendations even if suggestedQty is undefined
+    const riskCatalog: ChairSku[] = [
+      {
+        id: 'SKU-RISK-1',
+        upc: '000000000099',
+        name: 'Risk Item Alpha',
+        tab: 'core',
+        category: 'core',
+        manufacturer: 'Brand R',
+        animal: 'dog',
+        pack: '2',
+        priceCents: 200,
+        velocity: 'fast',
+        qoh: 0,
+        reorderStatus: 'SMART_ORDER',
+        doNotReorder: false,
+        riskScore: 75,  // qualifies via riskScore
+        // suggestedQty intentionally absent (undefined)
+      },
+    ]
+
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: riskCatalog,
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    vi.mocked(useOrder).mockReturnValue({
+      data: { ...activeOrder, budget_cents: 10_000 },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (String(url).includes('/floor-walk-lines')) return { data: [] }
+      if (String(url) === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getByText('Risk Item Alpha')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /load recommendations/i }))
+
+    await waitFor(() => {
+      const row = screen.getByText('Risk Item Alpha').closest('tr')
+      expect(row).not.toBeNull()
+      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      // qty = parseInt(pack, 10) || 1 = 2 (pack='2')
+      expect(parseInt(qtyInput.value, 10)).toBeGreaterThan(0)
     })
   })
 })

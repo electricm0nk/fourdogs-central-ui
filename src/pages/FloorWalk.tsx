@@ -229,8 +229,10 @@ export function FloorWalk() {
   )
 
   const prioritySkuIds = useMemo(
-    () => new Set(lineItems.filter((line) => line.quantity > 0).map((line) => line.skuId)),
-    [lineItems],
+    () => new Set(
+      floorWalkLinesQuery.data?.filter((l) => l.quantity > 0).map((l) => l.sku_id) ?? []
+    ),
+    [floorWalkLinesQuery.data],
   )
 
   const allBrands = useMemo(
