@@ -103,10 +103,15 @@ export function isFoodBrandTabKey(tab: CatalogTabKey): tab is FoodBrandTabKey {
 }
 
 export function buildCatalogTabs(skus: ChairSku[]): Array<{ key: CatalogTabKey; label: string }> {
+  if (skus.length === 0) return []
+
   const foodBrandCounts = new Map<string, number>()
+  const occupiedTabs = new Set<string>()
 
   for (const sku of skus) {
-    if (classifyCatalogTab(sku) !== 'food') continue
+    const tab = classifyCatalogTab(sku)
+    occupiedTabs.add(tab)
+    if (tab !== 'food') continue
     const key = normalizeBrandKey(sku.manufacturer || '')
     if (!key) continue
     foodBrandCounts.set(key, (foodBrandCounts.get(key) ?? 0) + 1)
@@ -120,13 +125,16 @@ export function buildCatalogTabs(skus: ChairSku[]): Array<{ key: CatalogTabKey; 
       label: titleCaseWords(brandKey),
     }))
 
+  // Only include STATIC_REST_TABS entries that have at least one classified SKU
+  const presentStaticTabs = STATIC_REST_TABS.filter(({ key }) => occupiedTabs.has(key))
+
   return [
     { key: 'all', label: 'All' },
     { key: 'frozen', label: 'Frozen' },
     { key: 'food', label: 'Food' },
     ...foodBrandTabs,
     { key: 'treats', label: 'Treats' },
-    ...STATIC_REST_TABS,
+    ...presentStaticTabs,
   ]
 }
 

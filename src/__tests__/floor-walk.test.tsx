@@ -174,4 +174,46 @@ describe('Floor Walk Tab', () => {
 
     await waitFor(() => expect(screen.getByText(/live catalog returned zero items/i)).toBeInTheDocument())
   })
+
+  it('priority badge uses server floor-walk data, not local qty state', async () => {
+    // uifix2-1-2: prioritySkuIds must derive from floorWalkLinesQuery.data, not lineItems
+    vi.mocked(useOrder).mockReturnValue({
+      data: mockOrder,
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: catalogSkus,
+      isLoading: false,
+      isSuccess: true,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    // Only SKU-001 is a floor-walk server item (qty=3 saved)
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (String(url).includes('/floor-walk-lines')) {
+        return { data: [{ sku_id: 'SKU-001', item_upc: '000000000001', quantity: 3 }] }
+      }
+      return { data: [] }
+    })
+
+    render(wrapper(mockOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Bark Biscuits').length).toBeGreaterThan(0)
+      expect(screen.getByText('Dog Food 24lb')).toBeInTheDocument()
+    })
+
+    // Find the row in the main catalog table (not the cart summary)
+    const barkCells = screen.getAllByText('Bark Biscuits')
+    const barkRow = barkCells.map((el) => el.closest('tr')).find((row) => row !== null)
+    const dogFoodRow = screen.getByText('Dog Food 24lb').closest('tr')
+    expect(barkRow).not.toBeNull()
+    expect(dogFoodRow).not.toBeNull()
+
+    // SKU-001 (Bark Biscuits) is in server floor-walk-lines → priority badge applied
+    expect(barkRow?.className).toContain('fuchsia')
+    // SKU-002 (Dog Food) is NOT in server floor-walk-lines → no priority badge
+    expect(dogFoodRow?.className).not.toContain('fuchsia')
+  })
 })
