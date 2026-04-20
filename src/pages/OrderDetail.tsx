@@ -24,7 +24,6 @@ import {
   getPrototypeSignalLabel,
   getPriorityBadgeClass,
   getPriorityRowClass,
-  getQtyConfidenceTier,
   resolveSkuTier,
   getSectionClass,
   getSignalBadgeClass,
