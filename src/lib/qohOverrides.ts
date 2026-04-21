@@ -11,8 +11,8 @@ export function loadQohOverrides(orderId: string | undefined): QohOverrideMap {
     const parsed = JSON.parse(raw) as Record<string, unknown>
     return Object.fromEntries(
       Object.entries(parsed)
-        .map(([skuId, value]) => [skuId, Number(value)])
-        .filter((entry): entry is [string, number] => Number.isFinite(entry[1]) && entry[1] >= 0),
+        .map(([skuId, value]) => [skuId, Number(value)] as [string, number])
+        .filter(([, value]) => Number.isFinite(value) && value >= 0),
     )
   } catch {
     return {}
