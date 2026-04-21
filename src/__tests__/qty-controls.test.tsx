@@ -126,7 +126,7 @@ describe('Floor Walk Search & Qty Controls', () => {
 
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-001/i }))
 
-    const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+    const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
     expect(qtyInput.value).toBe('1')
   })
 
@@ -141,7 +141,7 @@ describe('Floor Walk Search & Qty Controls', () => {
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-001/i }))
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /decrease sku-001/i }))
 
-    const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+    const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
     expect(qtyInput.value).toBe('0')
   })
 
@@ -155,7 +155,7 @@ describe('Floor Walk Search & Qty Controls', () => {
     // Qty starts at 0 — decrement should stay at 0
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /decrease sku-001/i }))
 
-    const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+    const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
     expect(qtyInput.value).toBe('0')
   })
 })
