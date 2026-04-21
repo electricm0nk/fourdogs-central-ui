@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildCatalogTabs } from '@/lib/catalogTabs'
+import { buildCatalogTabs, getBrandOptionsForTab } from '@/lib/catalogTabs'
 import type { ChairSku } from '@/lib/chairSandboxMock'
 
 function makeSku(overrides: Partial<ChairSku>): ChairSku {
@@ -71,12 +71,23 @@ describe('buildCatalogTabs', () => {
     expect(toysIdx).toBeLessThan(ruffIdx)
   })
 
-  it('always includes all, frozen, food, treats tabs for non-empty skus', () => {
+  it('only includes represented core tabs for the current vendor catalog', () => {
     const skus = [makeSku({ id: 'SKU-1', name: 'Dog Food', category: 'food', manufacturer: 'Acana' })]
     const keys = buildCatalogTabs(skus).map((t) => t.key)
     expect(keys).toContain('all')
-    expect(keys).toContain('frozen')
     expect(keys).toContain('food')
-    expect(keys).toContain('treats')
+    expect(keys).not.toContain('frozen')
+    expect(keys).not.toContain('treats')
+  })
+
+  it('returns only brands represented in the selected tab', () => {
+    const skus = [
+      makeSku({ id: 'SKU-1', name: 'Acana Dry Food', category: 'food', manufacturer: 'Acana' }),
+      makeSku({ id: 'SKU-2', name: 'Orijen Dry Food', category: 'food', manufacturer: 'Orijen' }),
+      makeSku({ id: 'SKU-3', name: 'Frozen Patties', category: 'frozen', manufacturer: 'Primal' }),
+    ]
+
+    expect(getBrandOptionsForTab(skus, 'food')).toEqual(['Acana', 'Orijen'])
+    expect(getBrandOptionsForTab(skus, 'frozen')).toEqual(['Primal'])
   })
 })

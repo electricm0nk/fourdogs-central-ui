@@ -17,6 +17,7 @@ import {
   getHotBadgeClass,
   getInactiveToggleBtnClass,
   getInputClass,
+  isHotVelocity,
   getKayleeBubbleClass,
   getMutedTextClass,
   getOperatorBubbleClass,
@@ -24,15 +25,16 @@ import {
   getPrototypeSignalLabel,
   getPriorityBadgeClass,
   getPriorityRowClass,
-  resolveSkuTier,
   getSectionClass,
   getSignalBadgeClass,
   getTableAltRowClass,
   getTableHeaderClass,
   getTableRowBaseClass,
   getTogglePillClass,
+  getWorksheetSignals,
   readUiMode,
   type UiMode,
+  type WorksheetSignal,
 } from '@/lib/orderGrid'
 import { api } from '@/lib/api'
 import { useOrder } from '@/hooks/use_order'
@@ -40,6 +42,7 @@ import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { buildCatalogTabs, getBrandOptionsForTab, matchesCatalogTab, type CatalogTabKey } from '@/lib/catalogTabs'
 import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
 import { useVersions, formatWiringVersion } from '@/hooks/use_versions'
+import { loadQohOverrides, saveQohOverrides } from '@/lib/qohOverrides'
 
 type StreamStatus = 'idle' | 'streaming' | 'done' | 'error'
 
@@ -66,7 +69,7 @@ interface SuggestionRecord {
   submitted_at: string
 }
 
-type SignalFilterKey = 'hot' | 'tier-1' | 'tier-2' | 'tier-3' | 'tier-4' | 'priority'
+type SignalFilterKey = 'hot' | WorksheetSignal | 'priority'
 
 interface WorksheetLineItem {
   skuId: string
@@ -152,6 +155,7 @@ export function OrderDetail() {
   const sourceSkus = catalogQuery.data ?? []
   const catalogSource = sourceSkus.length > 0 ? 'live' : 'none'
   const [lineItems, setLineItems] = useState<WorksheetLineItem[]>([])
+  const [qohOverrides, setQohOverrides] = useState<Record<string, number>>(() => loadQohOverrides(id))
   const worksheetEditedRef = useRef(false)
   const [uiMode, setUiMode] = useState<UiMode>(() => readUiMode())
 
@@ -216,6 +220,14 @@ export function OrderDetail() {
       window.localStorage.setItem('fd-ui-mode', uiMode)
     }
   }, [uiMode])
+
+  useEffect(() => {
+    setQohOverrides(loadQohOverrides(id))
+  }, [id])
+
+  useEffect(() => {
+    saveQohOverrides(id, qohOverrides)
+  }, [id, qohOverrides])
 
   useEffect(() => {
     function updateViewportHeight() {
@@ -322,6 +334,10 @@ export function OrderDetail() {
     () => new Map(lineItems.map((l) => [l.skuId, l.quantity])),
     [lineItems],
   )
+  const effectiveQohBySku = useMemo(
+    () => new Map(sourceSkus.map((sku) => [sku.id, qohOverrides[sku.id] ?? sku.qoh])),
+    [sourceSkus, qohOverrides],
+  )
 
   const lockedBySku = useMemo(
     () => new Map(lineItems.map((l) => [l.skuId, l.locked])),
@@ -330,6 +346,21 @@ export function OrderDetail() {
 
   const kayleeQtyBySku = useMemo(
     () => new Map(lineItems.filter((l) => l.kayleeQty !== undefined).map((l) => [l.skuId, l.kayleeQty as number])),
+    [lineItems],
+  )
+  const editedQohLines = useMemo(
+    () => sourceSkus
+      .filter((sku) => qohOverrides[sku.id] !== undefined)
+      .map((sku) => ({
+        systemId: sku.id,
+        upc: sku.upc,
+        name: sku.name,
+        qoh: qohOverrides[sku.id] as number,
+      })),
+    [sourceSkus, qohOverrides],
+  )
+  const hasKayleeRecommendations = useMemo(
+    () => lineItems.some((line) => line.kayleeQty !== undefined),
     [lineItems],
   )
 
@@ -367,23 +398,21 @@ export function OrderDetail() {
       const queryMatch = !lq || sku.id.toLowerCase().includes(lq) || sku.name.toLowerCase().includes(lq) || sku.manufacturer.toLowerCase().includes(lq)
       const qty = qtyBySku.get(sku.id) ?? 0
       const zeroMatch = hideZeroQty ? qty > 0 : true
-      const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
+      const effectiveQoh = effectiveQohBySku.get(sku.id) ?? sku.qoh
+      const zeroQohMatch = onlyZeroQoh ? effectiveQoh === 0 : true
       const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
       const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
       const isPriority = importedSkuIds.has(sku.id)
-      const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id), isPriority)
+      const signals = getWorksheetSignals(qty, kayleeQtyBySku.get(sku.id))
       const signalMatch = selectedSignalFilters.every((filter) => {
-        if (filter === 'hot') return sku.velocity === 'fast'
-        if (filter === 'tier-1') return tier === 1
-        if (filter === 'tier-2') return tier === 2
-        if (filter === 'tier-3') return tier === 3
-        if (filter === 'tier-4') return tier === 4
-        return isPriority
+        if (filter === 'hot') return isHotVelocity(sku.velocity)
+        if (filter === 'priority') return isPriority
+        return signals.includes(filter)
       })
 
       return tabMatch && brandMatch && animalMatch && queryMatch && zeroMatch && zeroQohMatch && only111Match && doNotReorderMatch && signalMatch
     }).sort(compareSkuByNameAndSize)
-  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku, kayleeQtyBySku, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand, importedSkuIds, selectedSignalFilters])
+  }, [sourceSkus, activeTab, animal, wsQuery, hideZeroQty, qtyBySku, kayleeQtyBySku, effectiveQohBySku, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand, importedSkuIds, selectedSignalFilters])
 
   const visibleWorksheetRange = useMemo(() => {
     const total = filteredCatalog.length
@@ -426,8 +455,8 @@ export function OrderDetail() {
     setSelectedSignalFilters((prev) => (prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]))
   }
 
-  function tierLabel(tier: 1 | 2 | 3 | 4): string {
-    return getPrototypeSignalLabel(tier)
+  function signalLabel(signal: WorksheetSignal): string {
+    return getPrototypeSignalLabel(signal)
   }
 
   function applyKayleeRecommendations() {
@@ -542,6 +571,50 @@ export function OrderDetail() {
 
   function sanitizeInput(text: string): string {
     return text.trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 500)
+  }
+
+  function upsertQoh(skuId: string, nextQoh: number, baseQoh: number) {
+    const safeQoh = Math.max(0, nextQoh)
+    setQohOverrides((prev) => {
+      if (safeQoh === baseQoh) {
+        const { [skuId]: _removed, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [skuId]: safeQoh }
+    })
+  }
+
+  async function handleExportQoh() {
+    if (!order || editedQohLines.length === 0) return
+    const orderTitle = `${order.vendor_name ?? 'Order'} - ${formatOrderDate(order.order_date)}`
+    const { exportQohXlsx } = await import('@/lib/exportXlsx')
+    await exportQohXlsx(editedQohLines, orderTitle)
+  }
+
+  function removeKayleeRecommendations() {
+    const persistedQtyBySku = new Map(
+      (floorWalkLinesQuery.data ?? []).map((line) => [line.sku_id, line.quantity]),
+    )
+
+    worksheetEditedRef.current = true
+    setLineItems((prev) => prev.flatMap((line) => {
+      if (line.kayleeQty === undefined) return [line]
+
+      const persistedQty = persistedQtyBySku.get(line.skuId) ?? 0
+      if (persistedQty > 0) {
+        return [{
+          ...line,
+          quantity: persistedQty,
+          kayleeQty: undefined,
+        }]
+      }
+
+      return [{
+        ...line,
+        quantity: 0,
+        kayleeQty: undefined,
+      }]
+    }))
   }
 
   async function handleSuggestionSubmit() {
@@ -1040,20 +1113,20 @@ export function OrderDetail() {
             >
               HOT
             </button>
-            {[1, 2, 3, 4].map((tier) => (
+            {(['increased', 'kaylee', 'decreased'] as WorksheetSignal[]).map((signal) => (
               <button
-                key={tier}
+                key={signal}
                 type="button"
-                onClick={() => toggleSignalFilter(`tier-${tier}` as SignalFilterKey)}
-                aria-pressed={selectedSignalFilters.includes(`tier-${tier}` as SignalFilterKey)}
+                onClick={() => toggleSignalFilter(signal)}
+                aria-pressed={selectedSignalFilters.includes(signal)}
                 className={cn(
                   'inline-flex rounded border px-2 py-1 font-semibold',
-                  selectedSignalFilters.includes(`tier-${tier}` as SignalFilterKey)
-                    ? getSignalBadgeClass(tier as 1 | 2 | 3 | 4, uiMode)
+                  selectedSignalFilters.includes(signal)
+                    ? getSignalBadgeClass(signal, uiMode)
                     : (uiMode === 'dark' ? 'border-[#334155] text-slate-300' : 'border-amber-300 text-stone-600'),
                 )}
               >
-                {tierLabel(tier as 1 | 2 | 3 | 4)}
+                {signalLabel(signal)}
               </button>
             ))}
             <button
@@ -1085,7 +1158,25 @@ export function OrderDetail() {
                   <th className="px-2 py-2 text-left">Lock</th>
                   <th className="px-2 py-2 text-left">Product</th>
                   <th className="px-2 py-2 text-left">Pack</th>
-                  <th className="px-2 py-2 text-right">QOH</th>
+                  <th className="px-2 py-2 text-right">
+                    <div className="flex flex-col items-end gap-1">
+                      {editedQohLines.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleExportQoh}
+                          className={cn(
+                            'rounded border px-2 py-1 text-[10px] font-semibold transition-colors',
+                            uiMode === 'dark'
+                              ? 'border-sky-600 bg-sky-700/30 text-sky-300 hover:bg-sky-700/50'
+                              : 'border-teal-600 bg-teal-600 text-white hover:bg-teal-700',
+                          )}
+                        >
+                          Export QoH XLSX
+                        </button>
+                      )}
+                      <span>QOH</span>
+                    </div>
+                  </th>
                   <th className="px-2 py-2 text-right" title="Days of supply: estimated days until stockout at current sales velocity">DOS (days)</th>
                   <th className="px-2 py-2 text-right" title="Composite inventory risk score (0–100): combines velocity, days of supply, and customer replenishment urgency">Risk %</th>
                   <th className="px-2 py-2 text-right">Price</th>
@@ -1105,7 +1196,7 @@ export function OrderDetail() {
                   const isLocked = lockedBySku.get(sku.id) ?? false
                   const lineTotal = sku.priceCents * qty
                   const isPriority = importedSkuIds.has(sku.id)
-                  const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id), isPriority)
+                  const signals = getWorksheetSignals(qty, kayleeQtyBySku.get(sku.id))
 
                   return (
                     <tr
@@ -1123,7 +1214,17 @@ export function OrderDetail() {
                       </td>
                       <td className="px-2 py-1">{sku.name}</td>
                       <td className="px-2 py-1">{sku.pack}</td>
-                      <td className="px-2 py-1 text-right">{sku.qoh}</td>
+                      <td className="px-2 py-1 text-right">
+                        <input
+                          type="number"
+                          min={0}
+                          value={effectiveQohBySku.get(sku.id) ?? sku.qoh}
+                          className={cn('w-16 text-center text-sm', getInputClass(uiMode))}
+                          onChange={(event) => upsertQoh(sku.id, Number(event.target.value) || 0, sku.qoh)}
+                          disabled={order.submitted}
+                          aria-label={`QOH ${sku.id}`}
+                        />
+                      </td>
                       <td className="px-2 py-1 text-right">
                         {sku.dosDays != null ? sku.dosDays : <span className={cn('opacity-40', getMutedTextClass(uiMode))}>—</span>}
                       </td>
@@ -1168,14 +1269,16 @@ export function OrderDetail() {
                         </div>
                       </td>
                       <td className="px-2 py-1 text-right">
-                        {sku.velocity === 'fast' && (
+                        {isHotVelocity(sku.velocity) && (
                           <span className={cn('inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getHotBadgeClass(uiMode))}>
                             HOT
                           </span>
                         )}
-                        <span className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getSignalBadgeClass(tier, uiMode))}>
-                          {tierLabel(tier)}
-                        </span>
+                        {signals.map((signal) => (
+                          <span key={signal} className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getSignalBadgeClass(signal, uiMode))}>
+                            {signalLabel(signal)}
+                          </span>
+                        ))}
                         {isPriority && (
                           <span className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getPriorityBadgeClass(uiMode))}>
                             PRIORITY
@@ -1241,6 +1344,19 @@ export function OrderDetail() {
             <p className={cn('mt-1 text-[10px]', getMutedTextClass(uiMode))}>
               Adds fast-mover recommendations to floor walk items without overwriting existing quantities.
             </p>
+            <button
+              type="button"
+              disabled={!hasKayleeRecommendations}
+              onClick={removeKayleeRecommendations}
+              className={cn(
+                'mt-2 w-full rounded border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                uiMode === 'dark'
+                  ? 'border-amber-700 bg-amber-900/30 text-amber-200 hover:bg-amber-900/50'
+                  : 'border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200',
+              )}
+            >
+              Remove Kaylee Recommendations
+            </button>
           </div>
 
           <h2 className="mb-3 text-base font-semibold">Kaylee Assistant</h2>
