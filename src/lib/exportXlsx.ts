@@ -7,6 +7,13 @@ export interface ExportLine {
   qty: number
 }
 
+export interface QohExportLine {
+  systemId: string
+  upc: string
+  name: string
+  qoh: number
+}
+
 /** Trigger a browser file download from a blob */
 function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
@@ -127,5 +134,64 @@ export async function exportFullXlsx(
   downloadBlob(
     new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     `Order_${safeName(orderTitle)}.xlsx`,
+  )
+}
+
+export async function exportQohXlsx(
+  lines: QohExportLine[],
+  orderTitle: string,
+): Promise<void> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Four Dogs Central'
+  wb.created = new Date()
+
+  const ws = wb.addWorksheet('QoH')
+
+  ws.mergeCells('A1:D1')
+  const titleCell = ws.getCell('A1')
+  titleCell.value = `${orderTitle} QoH`
+  titleCell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } }
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF762123' } }
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' }
+  ws.getRow(1).height = 28
+
+  ws.columns = [
+    { key: 'systemId', width: 20 },
+    { key: 'upc', width: 16 },
+    { key: 'name', width: 48 },
+    { key: 'qoh', width: 10 },
+  ]
+
+  const colHeaders = ['SystemID', 'UPC', 'Name', 'QoH']
+  const headerRow = ws.getRow(2)
+  colHeaders.forEach((header, index) => {
+    const cell = headerRow.getCell(index + 1)
+    cell.value = header
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006A71' } }
+    cell.alignment = { vertical: 'middle', horizontal: index === 0 || index === 3 ? 'center' : 'left' }
+  })
+  headerRow.height = 20
+
+  lines.forEach((line, idx) => {
+    const row = ws.getRow(idx + 3)
+    row.getCell(1).value = line.systemId
+    row.getCell(2).value = line.upc
+    row.getCell(3).value = line.name
+    row.getCell(4).value = line.qoh
+    if (idx % 2 === 0) {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF7E4' } }
+      })
+    }
+    row.getCell(4).alignment = { horizontal: 'center' }
+  })
+
+  ws.views = [{ state: 'frozen', ySplit: 2 }]
+
+  const buf = await wb.xlsx.writeBuffer()
+  downloadBlob(
+    new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `QoH_${safeName(orderTitle)}.xlsx`,
   )
 }

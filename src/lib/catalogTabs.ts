@@ -130,10 +130,10 @@ export function buildCatalogTabs(skus: ChairSku[]): Array<{ key: CatalogTabKey; 
 
   return [
     { key: 'all', label: 'All' },
-    { key: 'frozen', label: 'Frozen' },
-    { key: 'food', label: 'Food' },
+    ...(occupiedTabs.has('frozen') ? [{ key: 'frozen' as CatalogTabKey, label: 'Frozen' }] : []),
+    ...(occupiedTabs.has('food') ? [{ key: 'food' as CatalogTabKey, label: 'Food' }] : []),
     ...foodBrandTabs,
-    { key: 'treats', label: 'Treats' },
+    ...(occupiedTabs.has('treats') ? [{ key: 'treats' as CatalogTabKey, label: 'Treats' }] : []),
     ...presentStaticTabs,
   ]
 }

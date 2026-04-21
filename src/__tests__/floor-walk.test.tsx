@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FloorWalk } from '@/pages/FloorWalk'
@@ -215,5 +215,29 @@ describe('Floor Walk Tab', () => {
     expect(barkRow?.className).toContain('fuchsia')
     // SKU-002 (Dog Food) is NOT in server floor-walk-lines → no priority badge
     expect(dogFoodRow?.className).not.toContain('fuchsia')
+  })
+
+  it('allows editing QOH values in floor walk', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: mockOrder,
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: catalogSkus,
+      isLoading: false,
+      isSuccess: true,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+
+    render(wrapper(mockOrder.id))
+
+    const qohInput = await screen.findByRole('spinbutton', { name: /qoh sku-001/i })
+    fireEvent.change(qohInput, { target: { value: '9' } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('spinbutton', { name: /qoh sku-001/i })).toHaveValue(9)
+    })
   })
 })

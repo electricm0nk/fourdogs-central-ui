@@ -13,6 +13,8 @@ import type { ChairSku } from '@/lib/chairSandboxMock'
 import { api } from '@/lib/api'
 import type { Order, VendorAdapter } from '@/types/order'
 
+const mockExportQohXlsx = vi.fn()
+
 vi.mock('@/hooks/use_orders', () => ({ useOrders: vi.fn() }))
 vi.mock('@/hooks/use_order', () => ({ useOrder: vi.fn() }))
 vi.mock('@/hooks/use_vendor_catalog', () => ({ useVendorCatalog: vi.fn() }))
@@ -27,6 +29,11 @@ vi.mock('@/lib/api', () => ({
     post: vi.fn(),
     put: vi.fn(),
   },
+}))
+vi.mock('@/lib/exportXlsx', () => ({
+  exportQohXlsx: mockExportQohXlsx,
+  exportEtpXlsx: vi.fn(),
+  exportFullXlsx: vi.fn(),
 }))
 
 const activeOrder: Order = {
@@ -208,6 +215,7 @@ describe('OrderDetail — submit lifecycle', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockExportQohXlsx.mockReset()
     vi.mocked(useSubmitOrder).mockReturnValue({
       mutate: mockSubmitMutate,
       isPending: false,
@@ -216,6 +224,11 @@ describe('OrderDetail — submit lifecycle', () => {
       mutate: vi.fn(),
       isPending: false,
     } as unknown as ReturnType<typeof useArchiveOrder>)
+    vi.mocked(useVendorAdapters).mockReturnValue({
+      data: [mockAdapter],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorAdapters>)
     vi.mocked(useVendorCatalog).mockReturnValue({
       data: catalogSkus,
       isLoading: false,
@@ -340,7 +353,7 @@ describe('OrderDetail — submit lifecycle', () => {
     await waitFor(() => {
       const floorWalkRow = screen.getByText('Zebra Freeze Dried').closest('tr')
       expect(floorWalkRow).not.toBeNull()
-      const qtyInput = within(floorWalkRow as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(floorWalkRow as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       expect(qtyInput.value).toBe('3')
     })
 
@@ -465,7 +478,7 @@ describe('OrderDetail — submit lifecycle', () => {
     await waitFor(() => {
       const row = screen.getByText('Zebra Freeze Dried').closest('tr')
       expect(row).not.toBeNull()
-      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       expect(qtyInput.value).toBe('3')
     })
 
@@ -482,7 +495,7 @@ describe('OrderDetail — submit lifecycle', () => {
     await waitFor(() => {
       const persistedRow = screen.getByText('Zebra Freeze Dried').closest('tr')
       expect(persistedRow).not.toBeNull()
-      const qtyInput = within(persistedRow as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(persistedRow as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       expect(qtyInput.value).toBe('3')
     })
   })
@@ -537,7 +550,7 @@ describe('OrderDetail — submit lifecycle', () => {
     await waitFor(() => {
       const row = screen.getByText('Risk Item Alpha').closest('tr')
       expect(row).not.toBeNull()
-      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       // qty = parseInt(pack, 10) || 1 = 2 (pack='2')
       expect(parseInt(qtyInput.value, 10)).toBeGreaterThan(0)
     })
@@ -593,15 +606,305 @@ describe('OrderDetail — submit lifecycle', () => {
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /decrease sku-risk-2/i }))
 
     await waitFor(() => {
-      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       expect(qtyInput.value).toBe('0')
     })
 
     fireEvent.click(screen.getByRole('button', { name: /load recommendations/i }))
 
     await waitFor(() => {
-      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       expect(qtyInput.value).toBe('3')
+    })
+  })
+
+  it('keeps KAYLEE while showing INCREASED and DECREASED when the operator edits a recommended qty', async () => {
+    const recommendedCatalog: ChairSku[] = [
+      {
+        id: 'SKU-REC-STACK',
+        upc: '000000000299',
+        name: 'Kaylee Stack Item',
+        tab: 'core',
+        category: 'core',
+        manufacturer: 'Brand Stack',
+        animal: 'dog',
+        pack: '1',
+        priceCents: 100,
+        velocity: 'fast',
+        qoh: 3,
+        reorderStatus: 'SMART_ORDER',
+        doNotReorder: false,
+        suggestedQty: 2,
+      },
+    ]
+
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: recommendedCatalog,
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    vi.mocked(useOrder).mockReturnValue({
+      data: { ...activeOrder, budget_cents: 10_000 },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (String(url).includes('/floor-walk-lines')) return { data: [] }
+      if (String(url) === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getByText('Kaylee Stack Item')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /load recommendations/i }))
+
+    const row = await waitFor(() => {
+      const tableRow = screen.getByText('Kaylee Stack Item').closest('tr')
+      expect(tableRow).not.toBeNull()
+      return tableRow as HTMLTableRowElement
+    })
+
+    await waitFor(() => {
+      expect(within(row).getByText('KAYLEE')).toBeInTheDocument()
+      expect(within(row).queryByText('INCREASED')).not.toBeInTheDocument()
+      expect(within(row).queryByText('DECREASED')).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(within(row).getByRole('button', { name: /increase sku-rec-stack/i }))
+
+    await waitFor(() => {
+      expect(within(row).getByText('KAYLEE')).toBeInTheDocument()
+      expect(within(row).getByText('INCREASED')).toBeInTheDocument()
+      expect(within(row).queryByText('DECREASED')).not.toBeInTheDocument()
+    })
+
+    fireEvent.change(within(row).getAllByRole('spinbutton')[1], { target: { value: '1' } })
+
+    await waitFor(() => {
+      expect(within(row).getByText('KAYLEE')).toBeInTheDocument()
+      expect(within(row).getByText('DECREASED')).toBeInTheDocument()
+      expect(within(row).queryByText('INCREASED')).not.toBeInTheDocument()
+    })
+  })
+
+  it('does not mark worksheet-only additions as PRIORITY', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: {
+        ...activeOrder,
+        budget_cents: 1_000,
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      const path = String(url)
+      if (path.includes('/floor-walk-lines')) return { data: [] }
+      if (path === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha Kibble')).toBeInTheDocument()
+    })
+
+    const row = screen.getByText('Alpha Kibble').closest('tr')
+    expect(row).not.toBeNull()
+
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-rec-1/i }))
+
+    await waitFor(() => {
+      expect(within(row as HTMLTableRowElement).queryByText('PRIORITY')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows a QoH export action only after worksheet QoH edits exist', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: {
+        ...activeOrder,
+        budget_cents: 1_000,
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      const path = String(url)
+      if (path.includes('/floor-walk-lines')) return { data: [] }
+      if (path === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getByText('Zebra Freeze Dried')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: /export qoh xlsx/i })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: /qoh sku-fw-1/i }), { target: { value: '7' } })
+
+    const exportButton = await screen.findByRole('button', { name: /export qoh xlsx/i })
+    fireEvent.click(exportButton)
+
+    await waitFor(() => {
+      expect(mockExportQohXlsx).toHaveBeenCalledWith(
+        [
+          {
+            systemId: 'SKU-FW-1',
+            upc: '000000000001',
+            name: 'Zebra Freeze Dried',
+            qoh: 7,
+          },
+        ],
+        expect.stringContaining('Southeast Pet'),
+      )
+    })
+  })
+
+  it('treats medium velocity items as HOT because they move multiple units per week', async () => {
+    const mediumHotCatalog: ChairSku[] = [
+      {
+        id: 'SKU-MEDIUM-HOT',
+        upc: '000000000399',
+        name: 'Medium Velocity Item',
+        tab: 'core',
+        category: 'core',
+        manufacturer: 'Brand Hot',
+        animal: 'dog',
+        pack: '1',
+        priceCents: 100,
+        velocity: 'medium',
+        qoh: 4,
+        reorderStatus: 'SMART_ORDER',
+        doNotReorder: false,
+      },
+    ]
+
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: mediumHotCatalog,
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    vi.mocked(useOrder).mockReturnValue({
+      data: { ...activeOrder, budget_cents: 1_000 },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (String(url).includes('/floor-walk-lines')) return { data: [] }
+      if (String(url) === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    const row = await waitFor(() => {
+      const tableRow = screen.getByText('Medium Velocity Item').closest('tr')
+      expect(tableRow).not.toBeNull()
+      return tableRow as HTMLTableRowElement
+    })
+
+    expect(within(row).getByText('HOT')).toBeInTheDocument()
+  })
+
+  it('removes Kaylee recommendations without wiping persisted floor-walk quantities', async () => {
+    const recommendationCatalog: ChairSku[] = [
+      {
+        id: 'SKU-FW-1',
+        upc: '000000000001',
+        name: 'Zebra Freeze Dried',
+        tab: 'core',
+        category: 'core',
+        manufacturer: 'Brand Z',
+        animal: 'dog',
+        pack: '1',
+        priceCents: 10_000,
+        velocity: 'slow',
+        qoh: 0,
+        reorderStatus: 'SMART_ORDER',
+        doNotReorder: false,
+      },
+      {
+        id: 'SKU-KAYLEE-ONLY',
+        upc: '000000000499',
+        name: 'Kaylee Recommendation Only',
+        tab: 'core',
+        category: 'core',
+        manufacturer: 'Brand K',
+        animal: 'dog',
+        pack: '1',
+        priceCents: 100,
+        velocity: 'fast',
+        qoh: 0,
+        reorderStatus: 'SMART_ORDER',
+        doNotReorder: false,
+        suggestedQty: 2,
+      },
+    ]
+
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: recommendationCatalog,
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    vi.mocked(useOrder).mockReturnValue({
+      data: { ...activeOrder, budget_cents: 10_000 },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      const path = String(url)
+      if (path.includes('/floor-walk-lines')) {
+        return {
+          data: [
+            { sku_id: 'SKU-FW-1', item_upc: '000000000001', quantity: 3 },
+          ],
+        }
+      }
+      if (path === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(orderDetailWrapper(activeOrder.id))
+
+    await waitFor(() => {
+      const persistedRow = screen.getByText('Zebra Freeze Dried').closest('tr')
+      expect(persistedRow).not.toBeNull()
+      expect(within(persistedRow as HTMLTableRowElement).getByDisplayValue('3')).toBeInTheDocument()
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: /load recommendations/i }))
+
+    const kayleeOnlyRow = await waitFor(() => {
+      const tableRow = screen.getByText('Kaylee Recommendation Only').closest('tr')
+      expect(tableRow).not.toBeNull()
+      return tableRow as HTMLTableRowElement
+    })
+
+    await waitFor(() => {
+      expect(within(kayleeOnlyRow).getByDisplayValue('2')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /remove kaylee recommendations/i }))
+
+    await waitFor(() => {
+      const persistedRow = screen.getByText('Zebra Freeze Dried').closest('tr')
+      expect(persistedRow).not.toBeNull()
+      expect(within(persistedRow as HTMLTableRowElement).getByDisplayValue('3')).toBeInTheDocument()
+      const qtyInputs = within(kayleeOnlyRow).getAllByRole('spinbutton') as HTMLInputElement[]
+      expect(qtyInputs[1]?.value).toBe('0')
+      expect(within(kayleeOnlyRow).queryByText('KAYLEE')).not.toBeInTheDocument()
     })
   })
 })

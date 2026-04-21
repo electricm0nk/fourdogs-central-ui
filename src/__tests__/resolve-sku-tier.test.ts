@@ -1,39 +1,23 @@
 import { describe, it, expect } from 'vitest'
-import { resolveSkuTier } from '@/lib/orderGrid'
+import { getWorksheetSignals } from '@/lib/orderGrid'
 
-describe('resolveSkuTier', () => {
-  // uifix2-1-3: when no Kaylee rec is loaded, always return 4
-  it('returns tier 4 when kayleeQty is undefined, qty = 0', () => {
-    expect(resolveSkuTier(0, undefined, false)).toBe(4)
+describe('getWorksheetSignals', () => {
+  it('returns no worksheet signals when no Kaylee rec is loaded', () => {
+    expect(getWorksheetSignals(0, undefined)).toEqual([])
+    expect(getWorksheetSignals(4, undefined)).toEqual([])
+    expect(getWorksheetSignals(100, undefined)).toEqual([])
   })
 
-  it('returns tier 4 when kayleeQty is undefined, qty > 0', () => {
-    expect(resolveSkuTier(4, undefined, false)).toBe(4)
+  it('returns KAYLEE plus INCREASED when qty is above Kaylee qty', () => {
+    expect(getWorksheetSignals(5, 3)).toEqual(['kaylee', 'increased'])
   })
 
-  it('returns tier 4 when kayleeQty is undefined, large qty', () => {
-    expect(resolveSkuTier(100, undefined, false)).toBe(4)
+  it('returns only KAYLEE when qty equals Kaylee qty', () => {
+    expect(getWorksheetSignals(3, 3)).toEqual(['kaylee'])
   })
 
-  it('returns tier 4 when kayleeQty is undefined regardless of isImported', () => {
-    expect(resolveSkuTier(4, undefined, true)).toBe(4)
-    expect(resolveSkuTier(0, undefined, true)).toBe(4)
-  })
-
-  // Comparison tiers when kayleeQty is defined
-  it('returns INCREASED (1) when qty > kayleeQty', () => {
-    expect(resolveSkuTier(5, 3, false)).toBe(1)
-  })
-
-  it('returns KAYLEE (2) when qty === kayleeQty', () => {
-    expect(resolveSkuTier(3, 3, false)).toBe(2)
-  })
-
-  it('returns DECREASED (3) when qty < kayleeQty', () => {
-    expect(resolveSkuTier(1, 4, false)).toBe(3)
-  })
-
-  it('returns DECREASED (3) when qty is 0 and kayleeQty > 0', () => {
-    expect(resolveSkuTier(0, 2, false)).toBe(3)
+  it('returns KAYLEE plus DECREASED when qty is below Kaylee qty', () => {
+    expect(getWorksheetSignals(1, 4)).toEqual(['kaylee', 'decreased'])
+    expect(getWorksheetSignals(0, 2)).toEqual(['kaylee', 'decreased'])
   })
 })
