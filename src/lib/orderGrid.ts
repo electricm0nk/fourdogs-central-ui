@@ -1,6 +1,8 @@
 import type { ChairSku } from '@/lib/chairSandboxMock'
 
 export type UiMode = 'light' | 'dark'
+export type WorksheetSignal = 'increased' | 'kaylee' | 'decreased'
+export type VelocityValue = 'fast' | 'medium' | 'slow'
 
 export function readUiMode(): UiMode {
   if (typeof window === 'undefined') return 'dark'
@@ -98,34 +100,34 @@ export function getQtyConfidenceTier(quantity: number): 1 | 2 | 3 | 4 {
  * "Load Recommendations" has been pressed — so spurious INCREASED/KAYLEE/
  * DECREASED labels are never shown based purely on entered quantity.
  */
-export function resolveSkuTier(qty: number, kayleeQty: number | undefined, _isImported: boolean): 1 | 2 | 3 | 4 {
-  if (kayleeQty !== undefined) {
-    if (qty > kayleeQty) return 1
-    if (qty === kayleeQty) return 2
-    return 3
-  }
-  return 4  // No Kaylee recommendation loaded → no tier label
+export function getWorksheetSignals(qty: number, kayleeQty: number | undefined): WorksheetSignal[] {
+  if (kayleeQty === undefined) return []
+  if (qty > kayleeQty) return ['kaylee', 'increased']
+  if (qty < kayleeQty) return ['kaylee', 'decreased']
+  return ['kaylee']
 }
 
-export function getPrototypeSignalLabel(tier: 1 | 2 | 3 | 4): string {
-  if (tier === 1) return 'INCREASED'
-  if (tier === 2) return 'KAYLEE'
-  if (tier === 3) return 'DECREASED'
-  return 'GUESS'
+export function getPrototypeSignalLabel(signal: WorksheetSignal): string {
+  if (signal === 'increased') return 'INCREASED'
+  if (signal === 'decreased') return 'DECREASED'
+  return 'KAYLEE'
 }
 
-export function getSignalBadgeClass(tier: 1 | 2 | 3 | 4, mode: UiMode): string {
+export function getSignalBadgeClass(signal: WorksheetSignal, mode: UiMode): string {
   const dark = mode === 'dark'
-  if (tier === 1) return dark ? 'bg-emerald-900 text-emerald-100 border-emerald-700' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
-  if (tier === 2) return dark ? 'bg-blue-900 text-blue-100 border-blue-700' : 'bg-blue-100 text-blue-800 border-blue-300'
-  if (tier === 3) return dark ? 'bg-amber-900 text-amber-100 border-amber-700' : 'bg-amber-100 text-amber-800 border-amber-300'
-  return dark ? 'bg-slate-800 text-slate-100 border-slate-600' : 'bg-slate-100 text-slate-700 border-slate-300'
+  if (signal === 'increased') return dark ? 'bg-emerald-900 text-emerald-100 border-emerald-700' : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+  if (signal === 'decreased') return dark ? 'bg-amber-900 text-amber-100 border-amber-700' : 'bg-amber-100 text-amber-800 border-amber-300'
+  return dark ? 'bg-blue-900 text-blue-100 border-blue-700' : 'bg-blue-100 text-blue-800 border-blue-300'
 }
 
 export function getHotBadgeClass(mode: UiMode): string {
   return mode === 'dark'
     ? 'bg-red-900/60 text-red-300 border-red-700'
     : 'bg-red-100 text-red-700 border-red-300'
+}
+
+export function isHotVelocity(velocity: VelocityValue): boolean {
+  return velocity === 'fast' || velocity === 'medium'
 }
 
 export function getPriorityBadgeClass(mode: UiMode): string {

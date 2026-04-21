@@ -28,6 +28,7 @@ import {
 } from '@/lib/orderGrid'
 import { cn } from '@/lib/utils'
 import { useOrder } from '@/hooks/use_order'
+import { loadQohOverrides, saveQohOverrides } from '@/lib/qohOverrides'
 
 type CatalogTab = CatalogTabKey
 type ScanMode = 'add' | 'remove'
@@ -67,6 +68,7 @@ export function FloorWalk() {
   const sourceSkus = catalogQuery.data ?? []
   const catalogSource = sourceSkus.length > 0 ? 'live' : 'none'
   const [lineItems, setLineItems] = useState<OrderLine[]>([])
+  const [qohOverrides, setQohOverrides] = useState<Record<string, number>>(() => loadQohOverrides(id))
   const [activeTab, setActiveTab] = useState<CatalogTab>('all')
   const [animal, setAnimal] = useState<AnimalFilter>('all')
   const [hideTabs, setHideTabs] = useState(false)
@@ -120,6 +122,14 @@ export function FloorWalk() {
     hydratedFromServerRef.current = false
   }, [id])
 
+  useEffect(() => {
+    setQohOverrides(loadQohOverrides(id))
+  }, [id])
+
+  useEffect(() => {
+    saveQohOverrides(id, qohOverrides)
+  }, [id, qohOverrides])
+
   const floorWalkLinesQuery = useQuery({
     queryKey: ['order-floor-walk-lines', id],
     queryFn: () => api.get<{ data: FloorWalkLinePayload[] }>(`/v1/orders/${id}/floor-walk-lines`),
@@ -150,6 +160,10 @@ export function FloorWalk() {
   const skuMap = useMemo(() => new Map(sourceSkus.map((sku) => [sku.id, sku])), [sourceSkus])
   const upcMap = useMemo(() => new Map(sourceSkus.map((sku) => [sku.upc, sku])), [sourceSkus])
   const qtyBySku = useMemo(() => new Map(lineItems.map((line) => [line.skuId, line.quantity])), [lineItems])
+  const effectiveQohBySku = useMemo(
+    () => new Map(sourceSkus.map((sku) => [sku.id, qohOverrides[sku.id] ?? sku.qoh])),
+    [sourceSkus, qohOverrides],
+  )
 
   useEffect(() => {
     if (!floorWalkLinesQuery.isSuccess || hydratedFromServerRef.current) return
@@ -200,13 +214,14 @@ export function FloorWalk() {
         sku.manufacturer.toLowerCase().includes(lowerQuery)
       const qty = qtyBySku.get(sku.id) ?? 0
       const zeroMatch = hideZeroQty ? qty > 0 : true
-      const zeroQohMatch = onlyZeroQoh ? sku.qoh === 0 : true
+      const effectiveQoh = effectiveQohBySku.get(sku.id) ?? sku.qoh
+      const zeroQohMatch = onlyZeroQoh ? effectiveQoh === 0 : true
       const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
       const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
 
       return tabMatch && brandMatch && animalMatch && queryMatch && zeroMatch && zeroQohMatch && only111Match && doNotReorderMatch
     }).slice().sort(compareSkuByNameAndSize)
-  }, [sourceSkus, activeTab, animal, query, qtyBySku, hideZeroQty, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand])
+  }, [sourceSkus, activeTab, animal, query, qtyBySku, effectiveQohBySku, hideZeroQty, onlyZeroQoh, only111, hideDoNotReorder, frozenBrand, foodBrand, treatsBrand, toysBrand, everythingElseBrand])
 
   const addedLines = useMemo(
     () =>
@@ -302,6 +317,17 @@ export function FloorWalk() {
 
       if (nextQty === 0) return prev
       return [...prev, { skuId, quantity: nextQty }]
+    })
+  }
+
+  function upsertQoh(skuId: string, nextQoh: number, baseQoh: number) {
+    const safeQoh = Math.max(0, nextQoh)
+    setQohOverrides((prev) => {
+      if (safeQoh === baseQoh) {
+        const { [skuId]: _removed, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [skuId]: safeQoh }
     })
   }
 
@@ -665,7 +691,16 @@ export function FloorWalk() {
                       >
                         <td className="px-2 py-1">{sku.name}</td>
                         <td className="px-2 py-1">{sku.pack}</td>
-                        <td className="px-2 py-1 text-right">{sku.qoh}</td>
+                        <td className="px-2 py-1 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={effectiveQohBySku.get(sku.id) ?? sku.qoh}
+                            className={cn('w-16 text-center text-sm', getInputClass(uiMode))}
+                            onChange={(event) => upsertQoh(sku.id, Number(event.target.value) || 0, sku.qoh)}
+                            aria-label={`QOH ${sku.id}`}
+                          />
+                        </td>
                         <td className="px-2 py-1 text-right">{formatMoney(sku.priceCents)}</td>
                         <td className="px-2 py-1 text-right">
                           <div className="inline-flex items-center gap-1">
