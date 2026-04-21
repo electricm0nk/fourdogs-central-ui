@@ -8,6 +8,7 @@ import {
   type AnimalFilter,
   type ChairSku,
 } from '@/lib/chairSandboxMock'
+import { buildKayleeStreamUrl, getDevSessionId } from '@/lib/kayleeStream'
 import { connectKaylee } from '@/lib/chairSandboxApi'
 
 type DataMode = 'mock' | 'kaylee'
@@ -263,6 +264,7 @@ export function ChairSandbox() {
 
     const candidateRoots = ['', '/dev-api']
     const safeOrderId = orderId.trim()
+    const devSessionId = getDevSessionId()
     if (!safeOrderId) {
       setStreamStatus('error')
       setKayleeError('Order ID is required for live Kaylee chat.')
@@ -282,6 +284,7 @@ export function ChairSandbox() {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...(devSessionId ? { 'x-dev-session-id': devSessionId } : {}),
         },
         body: JSON.stringify({ text: operatorText }),
       })
@@ -324,7 +327,7 @@ export function ChairSandbox() {
     const replyId = `kaylee-${Date.now()}`
     setMessages((prev) => [...prev, { id: replyId, role: 'kaylee', text: '' }])
 
-    const streamUrl = `${resolvedRoot}/v1/orders/${safeOrderId}/kaylee/stream?msg=${encodeURIComponent(streamToken)}`
+    const streamUrl = buildKayleeStreamUrl(resolvedRoot, safeOrderId, streamToken)
     const es = new EventSource(streamUrl, { withCredentials: true })
     streamRef.current = es
 
