@@ -3,14 +3,19 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FloorWalk } from '@/pages/FloorWalk'
+import { OrderDetail } from '@/pages/OrderDetail'
 import { useOrder } from '@/hooks/use_order'
 import { useVendorCatalog } from '@/hooks/use_vendor_catalog'
+import { useVendorAdapters } from '@/hooks/use_vendor_adapters'
+import { useSubmitOrder } from '@/hooks/use_order_mutations'
 import { api } from '@/lib/api'
 import type { Order } from '@/types/order'
 import type { ChairSku } from '@/lib/chairSandboxMock'
 
 vi.mock('@/hooks/use_order', () => ({ useOrder: vi.fn() }))
 vi.mock('@/hooks/use_vendor_catalog', () => ({ useVendorCatalog: vi.fn() }))
+vi.mock('@/hooks/use_vendor_adapters', () => ({ useVendorAdapters: vi.fn() }))
+vi.mock('@/hooks/use_order_mutations', () => ({ useSubmitOrder: vi.fn() }))
 vi.mock('@/lib/api', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
 }))
@@ -72,11 +77,35 @@ function wrapper(id: string) {
   )
 }
 
+function worksheetTransitionWrapper(id: string) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return (
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[`/orders/${id}/floor-walk`]}>
+        <Routes>
+          <Route path="/orders/:id/floor-walk" element={<FloorWalk />} />
+          <Route path="/orders/:id" element={<OrderDetail />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  )
+}
+
 describe('Floor Walk Tab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(api.get).mockResolvedValue({ data: [] })
     vi.mocked(api.post).mockResolvedValue({ data: {} })
+    vi.mocked(api.put).mockResolvedValue({ data: {} })
+    vi.mocked(useVendorAdapters).mockReturnValue({
+      data: [{ id: mockOrder.vendor_adapter_id, name: 'Southeast Pet', adapter_type: 'sep', created_at: '2026-04-12T00:00:00Z' }],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorAdapters>)
+    vi.mocked(useSubmitOrder).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useSubmitOrder>)
   })
 
   it('shows Floor Walk page heading', async () => {
@@ -238,6 +267,42 @@ describe('Floor Walk Tab', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('spinbutton', { name: /qoh sku-001/i })).toHaveValue(9)
+    })
+  })
+
+  it('carries newly added floor-walk items into the worksheet without a refresh', async () => {
+    vi.mocked(useOrder).mockReturnValue({
+      data: { ...mockOrder, budget_cents: 1_000 },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useOrder>)
+    vi.mocked(useVendorCatalog).mockReturnValue({
+      data: catalogSkus,
+      isLoading: false,
+      isSuccess: true,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVendorCatalog>)
+    vi.mocked(api.get).mockImplementation(async (url: string) => {
+      if (String(url).includes('/floor-walk-lines')) return { data: [] }
+      if (String(url) === '/v1/suggestions') return { data: [] }
+      return { data: [] }
+    })
+
+    render(worksheetTransitionWrapper(mockOrder.id))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /increase sku-001/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /increase sku-001/i }))
+    fireEvent.click(screen.getByRole('button', { name: /continue to worksheet/i }))
+
+    await waitFor(() => {
+      const row = screen.getByText('Bark Biscuits').closest('tr')
+      expect(row).not.toBeNull()
+      expect(screen.getByText(/floor walk quantities are pre-filled/i)).toBeInTheDocument()
+      expect((row?.querySelectorAll('input[type="number"]')[1] as HTMLInputElement).value).toBe('1')
     })
   })
 })
