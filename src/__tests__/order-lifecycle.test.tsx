@@ -606,14 +606,14 @@ describe('OrderDetail — submit lifecycle', () => {
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /decrease sku-risk-2/i }))
 
     await waitFor(() => {
-      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       expect(qtyInput.value).toBe('0')
     })
 
     fireEvent.click(screen.getByRole('button', { name: /load recommendations/i }))
 
     await waitFor(() => {
-      const qtyInput = within(row as HTMLTableRowElement).getByRole('spinbutton') as HTMLInputElement
+      const qtyInput = within(row as HTMLTableRowElement).getAllByRole('spinbutton')[1] as HTMLInputElement
       expect(qtyInput.value).toBe('3')
     })
   })
@@ -683,7 +683,7 @@ describe('OrderDetail — submit lifecycle', () => {
       expect(within(row).queryByText('DECREASED')).not.toBeInTheDocument()
     })
 
-    fireEvent.change(within(row).getByRole('spinbutton'), { target: { value: '1' } })
+    fireEvent.change(within(row).getAllByRole('spinbutton')[1], { target: { value: '1' } })
 
     await waitFor(() => {
       expect(within(row).getByText('KAYLEE')).toBeInTheDocument()

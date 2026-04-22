@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,6 +63,7 @@ function formatOrderDate(dateStr: string): string {
 export function FloorWalk() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: order, isLoading } = useOrder(id ?? '')
   const catalogQuery = useVendorCatalog(order?.vendor_id, order?.vendor_adapter_id)
   const sourceSkus = catalogQuery.data ?? []
@@ -349,6 +350,7 @@ export function FloorWalk() {
       .filter((line): line is FloorWalkLinePayload => line !== null)
 
     await saveFloorWalkLines.mutateAsync(payload)
+    queryClient.setQueryData(['order-floor-walk-lines', id], { data: payload })
   }
 
   async function handleContinueToWorksheet() {

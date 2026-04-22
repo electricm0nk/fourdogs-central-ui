@@ -7,6 +7,18 @@ import type { ChairSku } from '@/lib/chairSandboxMock'
 // c=order multiples, k=vendor cost, sp=species, t=tab/type
 type RawItem = Record<string, unknown>
 
+export function buildVendorCatalogPath(vendorId?: number | null, vendorAdapterId?: string): string {
+  if (vendorAdapterId) {
+    return `/v1/items?vendor_adapter_id=${encodeURIComponent(vendorAdapterId)}`
+  }
+
+  if (vendorId) {
+    return `/v1/items?vendor_id=${encodeURIComponent(vendorId.toString())}`
+  }
+
+  return '/v1/items'
+}
+
 function inferTab(raw: string): ChairSku['tab'] {
   const v = raw.toLowerCase()
   if (v.includes('frozen')) return 'frozen'
@@ -94,15 +106,8 @@ function normalizeItem(row: RawItem, idx: number): ChairSku {
  */
 export function useVendorCatalog(vendorId?: number | null, vendorAdapterId?: string) {
   return useQuery({
-    queryKey: ['vendor-catalog', vendorId ?? vendorAdapterId ?? 'default'],
-    queryFn: () => {
-      const url =  vendorId
-        ? `/v1/items?vendor_id=${encodeURIComponent(vendorId.toString())}`
-        : vendorAdapterId
-        ? `/v1/items?vendor_adapter_id=${encodeURIComponent(vendorAdapterId)}`
-        : '/v1/items'
-      return api.get<unknown>(url)
-    },
+    queryKey: ['vendor-catalog', vendorAdapterId ?? vendorId ?? 'default'],
+    queryFn: () => api.get<unknown>(buildVendorCatalogPath(vendorId, vendorAdapterId)),
     select: (data) => {
       const rows: RawItem[] = Array.isArray(data)
         ? (data as RawItem[])
