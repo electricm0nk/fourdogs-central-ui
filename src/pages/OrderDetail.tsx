@@ -333,14 +333,13 @@ export function OrderDetail() {
     [lineItems],
   )
 
-  function resolveSkuTier(qty: number, kayleeQty: number | undefined, isImported: boolean): 1 | 2 | 3 | 4 {
+  function resolveSkuTier(qty: number, kayleeQty: number | undefined): 1 | 2 | 3 | 4 {
     if (kayleeQty !== undefined) {
       if (qty > kayleeQty) return 1
       if (qty === kayleeQty) return 2
       return 3
     }
-    if (!isImported && qty > 0) return 1
-    return getQtyConfidenceTier(qty)
+    return 4
   }
 
   const tabOptions = useMemo(() => buildCatalogTabs(sourceSkus), [sourceSkus])
@@ -381,7 +380,7 @@ export function OrderDetail() {
       const only111Match = only111 ? Number.parseInt(sku.pack, 10) === 111 : true
       const doNotReorderMatch = hideDoNotReorder ? !sku.doNotReorder : true
       const isPriority = importedSkuIds.has(sku.id)
-      const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id), isPriority)
+      const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id))
       const signalMatch = selectedSignalFilters.every((filter) => {
         if (filter === 'hot') return sku.velocity === 'fast'
         if (filter === 'tier-1') return tier === 1
@@ -484,6 +483,22 @@ export function OrderDetail() {
     setTimeout(() => setRecLoading(false), 300)
   }
 
+  function removeKayleeRecommendations() {
+    worksheetEditedRef.current = true
+    setLineItems((prev) =>
+      prev.filter((item) => {
+        // Keep items without a Kaylee tag
+        if (item.kayleeQty === undefined) return true
+        // Never remove priority items
+        if (importedSkuIds.has(item.skuId)) return true
+        // Keep if locked
+        if (item.locked) return true
+        // Remove Kaylee-tagged, unlocked, non-priority items
+        return false
+      }),
+    )
+  }
+
   function cleanupStreams() {
     if (streamRef.current) {
       streamRef.current.close()
@@ -503,6 +518,11 @@ export function OrderDetail() {
 
       if (existingIndex >= 0) {
         if (prev[existingIndex].locked) return prev
+        // Priority items can only increase, never decrease or be removed
+        if (importedSkuIds.has(skuId)) {
+          if (nextQty < prev[existingIndex].quantity) return prev
+          // qty === current is a no-op but still process to reach the update path
+        }
         const copy = [...prev]
         if (nextQty === 0) {
           copy.splice(existingIndex, 1)
@@ -1077,7 +1097,8 @@ export function OrderDetail() {
                   const isLocked = lockedBySku.get(sku.id) ?? false
                   const lineTotal = sku.priceCents * qty
                   const isPriority = importedSkuIds.has(sku.id)
-                  const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id), isPriority)
+                  const hasKayleeTag = kayleeQtyBySku.has(sku.id)
+                  const tier = resolveSkuTier(qty, kayleeQtyBySku.get(sku.id))
 
                   return (
                     <tr
@@ -1115,7 +1136,7 @@ export function OrderDetail() {
                             type="button"
                             className={cn('h-10 w-10 rounded border text-lg font-bold', uiMode === 'dark' ? 'border-[#334155] bg-[#1E293B] text-slate-200 active:bg-[#0B1424]' : 'border-amber-300 bg-amber-50 text-stone-700 active:bg-amber-100')}
                             onClick={() => upsertLineQuantity(sku.id, qty - 1)}
-                            disabled={order.submitted || isLocked}
+                            disabled={order.submitted || isLocked || isPriority}
                             aria-label={`Decrease ${sku.id}`}
                           >
                             −
@@ -1145,9 +1166,11 @@ export function OrderDetail() {
                             HOT
                           </span>
                         )}
-                        <span className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getSignalBadgeClass(tier, uiMode))}>
-                          {tierLabel(tier)}
-                        </span>
+                        {hasKayleeTag && (
+                          <span className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getSignalBadgeClass(tier, uiMode))}>
+                            {tierLabel(tier)}
+                          </span>
+                        )}
                         {isPriority && (
                           <span className={cn('ml-1 inline-flex rounded border px-2 py-1 text-[10px] font-semibold', getPriorityBadgeClass(uiMode))}>
                             PRIORITY
@@ -1210,8 +1233,21 @@ export function OrderDetail() {
             >
               {recLoading ? 'Loading…' : 'Load Recommendations'}
             </button>
+            <button
+              type="button"
+              onClick={removeKayleeRecommendations}
+              className={cn(
+                'mt-1 w-full rounded border px-3 py-1.5 text-xs font-semibold transition-colors',
+                uiMode === 'dark'
+                  ? 'border-rose-700 bg-rose-900/20 text-rose-300 hover:bg-rose-900/40'
+                  : 'border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100',
+              )}
+            >
+              Remove Kaylee Recommendations
+            </button>
             <p className={cn('mt-1 text-[10px]', getMutedTextClass(uiMode))}>
               Adds fast-mover recommendations to floor walk items without overwriting existing quantities.
+              Removing clears Kaylee-tagged items (unless locked or priority).
             </p>
           </div>
 

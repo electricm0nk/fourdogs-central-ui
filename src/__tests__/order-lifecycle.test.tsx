@@ -353,7 +353,7 @@ describe('OrderDetail — submit lifecycle', () => {
     })
   })
 
-  it('applies INCREASED tag when adding a new worksheet item with the plus button', async () => {
+  it('does not apply any Kaylee signal tag when manually adding a non-Kaylee worksheet item', async () => {
     vi.mocked(useOrder).mockReturnValue({
       data: {
         ...activeOrder,
@@ -384,12 +384,16 @@ describe('OrderDetail — submit lifecycle', () => {
     fireEvent.click(within(row as HTMLTableRowElement).getByRole('button', { name: /increase sku-fw-1/i }))
 
     await waitFor(() => {
-      expect(within(row as HTMLTableRowElement).getByText('INCREASED')).toBeInTheDocument()
+      // Kaylee signal badges (INCREASED/KAYLEE/DECREASED) must NOT appear for manually-added items
+      expect(within(row as HTMLTableRowElement).queryByText('INCREASED')).not.toBeInTheDocument()
+      expect(within(row as HTMLTableRowElement).queryByText('KAYLEE')).not.toBeInTheDocument()
       expect(within(row as HTMLTableRowElement).queryByText('DECREASED')).not.toBeInTheDocument()
+      // Also no PRIORITY since item was not added in the floor walk stage
+      expect(within(row as HTMLTableRowElement).queryByText('PRIORITY')).not.toBeInTheDocument()
     })
   })
 
-  it('applies legend signal filters as multi-select AND (hot + increased)', async () => {
+  it('applies legend signal filters as multi-select AND (hot + priority)', async () => {
     vi.mocked(useOrder).mockReturnValue({
       data: {
         ...activeOrder,
@@ -420,11 +424,14 @@ describe('OrderDetail — submit lifecycle', () => {
       expect(screen.getByText('Alpha Kibble')).toBeInTheDocument()
     })
 
+    // Both items are PRIORITY (from floor walk); only Alpha Kibble is HOT (fast velocity)
     fireEvent.click(screen.getByRole('button', { name: 'HOT' }))
-    fireEvent.click(screen.getByRole('button', { name: 'INCREASED' }))
+    fireEvent.click(screen.getByRole('button', { name: 'PRIORITY' }))
 
     await waitFor(() => {
+      // Alpha Kibble satisfies both HOT (fast velocity) AND PRIORITY (floor walk)
       expect(screen.getByText('Alpha Kibble')).toBeInTheDocument()
+      // Zebra Freeze Dried is PRIORITY but not HOT — filtered out by AND logic
       expect(screen.queryByText('Zebra Freeze Dried')).not.toBeInTheDocument()
     })
   })
