@@ -542,6 +542,8 @@ export function OrderDetail() {
 
       if (existingIndex >= 0) {
         if (prev[existingIndex].locked) return prev
+        // Priority items can only increase, never decrease or be removed
+        if (importedSkuIds.has(skuId) && nextQty < prev[existingIndex].quantity) return prev
         const copy = [...prev]
         if (nextQty === 0) {
           copy.splice(existingIndex, 1)
@@ -593,29 +595,23 @@ export function OrderDetail() {
   }
 
   function removeKayleeRecommendations() {
-    const persistedQtyBySku = new Map(
-      (floorWalkLinesQuery.data ?? []).map((line) => [line.sku_id, line.quantity]),
-    )
-
     worksheetEditedRef.current = true
-    setLineItems((prev) => prev.flatMap((line) => {
-      if (line.kayleeQty === undefined) return [line]
-
-      const persistedQty = persistedQtyBySku.get(line.skuId) ?? 0
-      if (persistedQty > 0) {
-        return [{
-          ...line,
-          quantity: persistedQty,
-          kayleeQty: undefined,
-        }]
-      }
-
-      return [{
-        ...line,
-        quantity: 0,
-        kayleeQty: undefined,
-      }]
-    }))
+    setLineItems((prev) =>
+      prev.filter((line) => {
+        // Keep items without a Kaylee tag
+        if (line.kayleeQty === undefined) return true
+        // Never remove priority items
+        if (importedSkuIds.has(line.skuId)) return true
+        // Keep if locked
+        if (line.locked) return true
+        // Remove Kaylee-tagged, unlocked, non-priority items
+        return false
+      }).map((line) => {
+        // Strip kayleeQty from retained items so signals clear
+        if (line.kayleeQty !== undefined) return { ...line, kayleeQty: undefined }
+        return line
+      }),
+    )
   }
 
   async function handleSuggestionSubmit() {
@@ -1247,7 +1243,7 @@ export function OrderDetail() {
                             type="button"
                             className={cn('h-10 w-10 rounded border text-lg font-bold', uiMode === 'dark' ? 'border-[#334155] bg-[#1E293B] text-slate-200 active:bg-[#0B1424]' : 'border-amber-300 bg-amber-50 text-stone-700 active:bg-amber-100')}
                             onClick={() => upsertLineQuantity(sku.id, qty - 1)}
-                            disabled={order.submitted || isLocked}
+                            disabled={order.submitted || isLocked || isPriority}
                             aria-label={`Decrease ${sku.id}`}
                           >
                             −
